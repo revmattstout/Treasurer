@@ -7,11 +7,11 @@ import re
 from flask import (Blueprint, Response, abort, current_app, flash, redirect, render_template,
                    request, send_from_directory, session, url_for)
 
-from . import ai
+from . import ai, services
 from .categorize import apply_rules, rule_pattern_from_description
 from .db import get_db, get_setting, set_setting
-from .importers import ImportError_, parse_bank_file, parse_date, parse_amount, parse_giving_csv, decode
-from .receipts import auto_match, auto_match_all, candidates, mime_for, store_file
+from .importers import ImportError_, parse_date, parse_amount
+from .receipts import auto_match, candidates
 from .reports import available_months, build_report, report_for_ai
 
 bp = Blueprint("main", __name__)
@@ -85,13 +85,10 @@ def index():
 
 @bp.route("/upload")
 def upload():
-    return render_template("upload.html")
-
-
-def _record_import(conn, kind, filename, added, skipped, note=None):
-    cur = conn.execute("INSERT INTO imports(kind, filename, rows_added, rows_skipped, note) VALUES (?,?,?,?,?)",
-                       (kind, filename, added, skipped, note))
-    return cur.lastrowid
+    from . import mailbox
+    conn = get_db()
+    return render_template("upload.html", mail=mailbox.config_status(),
+                           mail_log=conn.execute("SELECT * FROM email_log ORDER BY id DESC LIMIT 15").fetchall())
 
 
 @bp.route("/upload/bank", methods=["POST"])
@@ -103,46 +100,17 @@ def upload_bank():
         flash("Choose at least one file.", "error")
         return redirect(url_for("main.upload"))
     for f in files:
-        data = f.read()
         try:
-            if f.filename.lower().endswith(".pdf"):
-                if not ai.enabled():
-                    raise ImportError_("PDF statements need the Claude integration (set ANTHROPIC_API_KEY), "
-                                       "or download a CSV/OFX export from online banking instead.")
-                stmt = ai.read_pdf_statement(data)
-                from .importers import _with_occurrence
-                records = [{"date": parse_date(t.date), "amount": round(t.amount, 2),
-                            "description": t.description, "balance": t.balance,
-                            "account": account or stmt.account_last4} for t in stmt.transactions]
-                if stmt.ending_balance is not None and records:
-                    max(records, key=lambda r: r["date"])["balance"] = stmt.ending_balance
-                _with_occurrence(records, lambda r: (r["date"], r["amount"], r["description"].upper()), "bank")
-                note = "read from PDF by Claude — please spot-check against the statement"
-            else:
-                records = parse_bank_file(f.filename, data, account)
-                note = None
+            res = services.import_bank(conn, f.filename, f.read(), account)
         except (ImportError_, ai.AIError, ValueError) as e:
             flash(f"{f.filename}: {e}", "error")
             continue
-        import_id = _record_import(conn, "bank", f.filename, 0, 0, note)
-        added = 0
-        for r in records:
-            cur = conn.execute(
-                "INSERT OR IGNORE INTO transactions(date, amount, description, balance, account, import_id, fingerprint) "
-                "VALUES (?,?,?,?,?,?,?)",
-                (r["date"], r["amount"], r["description"], r["balance"], r["account"], import_id, r["fingerprint"]))
-            added += cur.rowcount
-        conn.execute("UPDATE imports SET rows_added=?, rows_skipped=? WHERE id=?",
-                     (added, len(records) - added, import_id))
-        conn.commit()
-        categorized = apply_rules(conn)
-        matched = auto_match_all(conn)
-        msg = f"{f.filename}: imported {added} transactions"
-        if len(records) - added:
-            msg += f" ({len(records) - added} already imported, skipped)"
-        msg += f"; {categorized} auto-categorized"
-        if matched:
-            msg += f"; {matched} receipts matched"
+        msg = f"{f.filename}: imported {res['added']} transactions"
+        if res["skipped"]:
+            msg += f" ({res['skipped']} already imported, skipped)"
+        msg += f"; {res['categorized']} auto-categorized"
+        if res["matched"]:
+            msg += f"; {res['matched']} receipts matched"
         flash(msg + ".", "success")
     return redirect(url_for("main.transactions", filter="uncategorized"))
 
@@ -157,24 +125,12 @@ def upload_giving():
         return redirect(url_for("main.upload"))
     for f in files:
         try:
-            records = parse_giving_csv(decode(f.read()), platform)
+            res = services.import_giving(conn, f.filename, f.read(), platform)
         except ImportError_ as e:
             flash(f"{f.filename}: {e}", "error")
             continue
-        import_id = _record_import(conn, "giving", f.filename, 0, 0)
-        added = 0
-        for r in records:
-            cur = conn.execute(
-                "INSERT OR IGNORE INTO donations(date, gross, fee, net, donor, fund, method, platform, import_id, fingerprint) "
-                "VALUES (?,?,?,?,?,?,?,?,?,?)",
-                (r["date"], r["gross"], r["fee"], r["net"], r["donor"], r["fund"], r["method"],
-                 r["platform"], import_id, r["fingerprint"]))
-            added += cur.rowcount
-        conn.execute("UPDATE imports SET rows_added=?, rows_skipped=? WHERE id=?",
-                     (added, len(records) - added, import_id))
-        conn.commit()
-        flash(f"{f.filename}: imported {added} gifts"
-              + (f" ({len(records) - added} already imported, skipped)" if len(records) - added else "") + ".",
+        flash(f"{f.filename}: imported {res['added']} gifts"
+              + (f" ({res['skipped']} already imported, skipped)" if res["skipped"] else "") + ".",
               "success")
     return redirect(url_for("main.donations"))
 
@@ -186,38 +142,19 @@ def upload_receipts():
     if not files:
         flash("Choose at least one file.", "error")
         return redirect(url_for("main.upload"))
-    cats = [c["name"] for c in _categories(conn) if c["kind"] == "expense"]
-    use_ai = ai.enabled() and request.form.get("read_with_ai", "on") == "on"
+    use_ai = request.form.get("read_with_ai", "on") == "on"
     added = read = matched = 0
     for f in files:
-        mime = mime_for(f.filename)
-        if not mime:
-            flash(f"{f.filename}: unsupported file type (use JPG, PNG, PDF, WEBP or HEIC).", "error")
+        try:
+            res = services.add_receipt(conn, current_app.config["RECEIPTS_DIR"], f.filename, f.read(), use_ai)
+        except ImportError_ as e:
+            flash(f"{f.filename}: {e}", "error")
             continue
-        data = f.read()
-        stored = store_file(current_app.config["RECEIPTS_DIR"], f.filename, data)
-        fields = {"date": None, "amount": None, "vendor": None, "category": None, "purpose": None}
-        if use_ai and mime != "image/heic":
-            try:
-                info = ai.read_receipt(data, mime, cats)
-                fields.update(vendor=info.vendor, amount=abs(info.total) if info.total is not None else None,
-                              category=info.category, purpose=info.purpose)
-                try:
-                    fields["date"] = parse_date(info.date) if info.date else None
-                except ValueError:
-                    pass
-                read += 1
-            except ai.AIError as e:
-                flash(f"{f.filename}: couldn't read automatically ({e}). Fill it in by hand below.", "error")
-        cur = conn.execute(
-            "INSERT INTO receipts(original_name, stored_name, date, amount, vendor, category, purpose) "
-            "VALUES (?,?,?,?,?,?,?)",
-            (f.filename, stored, fields["date"], fields["amount"], fields["vendor"], fields["category"],
-             fields["purpose"]))
-        conn.commit()
         added += 1
-        if auto_match(conn, cur.lastrowid):
-            matched += 1
+        read += res["read"]
+        matched += res["matched"]
+        if res["error"]:
+            flash(f"{f.filename}: couldn't read automatically ({res['error']}). Fill it in by hand below.", "error")
     if added:
         msg = f"Uploaded {added} receipt(s)"
         if read:
@@ -225,6 +162,21 @@ def upload_receipts():
         msg += f"; {matched} matched to bank transactions."
         flash(msg, "success")
     return redirect(url_for("main.receipts", filter="unmatched"))
+
+
+@bp.route("/upload/check-email", methods=["POST"])
+def check_email():
+    from . import mailbox
+    conn = get_db()
+    try:
+        summary = mailbox.fetch_and_import(conn, current_app.config["RECEIPTS_DIR"])
+    except mailbox.MailboxError as e:
+        flash(str(e), "error")
+        return redirect(url_for("main.upload"))
+    flash(summary.message(), "success" if not summary.errors else "error")
+    for err in summary.errors[:10]:
+        flash(err, "error")
+    return redirect(url_for("main.upload"))
 
 
 # ---------------------------------------------------------------- transactions

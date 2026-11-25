@@ -36,7 +36,9 @@ python run.py            # then open http://127.0.0.1:5000
 
 Data is stored in `instance/` (a SQLite database plus the receipt files). Back that folder up. Set `TREASURER_DATA_DIR` to keep it somewhere else.
 
-### Optional settings (environment variables)
+### Optional settings
+
+Copy `.env.example` to `.env` and fill it in, or set these as environment variables. The `.env` file is git-ignored.
 
 | Variable | Purpose |
 |---|---|
@@ -45,8 +47,44 @@ Data is stored in `instance/` (a SQLite database plus the receipt files). Back t
 | `TREASURER_DATA_DIR` | Where the database and receipts are stored |
 | `HOST` / `PORT` | Listen address (default `127.0.0.1:5000`) |
 | `TREASURER_MODEL` | Claude model (default `claude-opus-5-5`) |
+| `TREASURER_EMAIL_ADDRESS`, `TREASURER_EMAIL_APP_PASSWORD`, `TREASURER_EMAIL_ALLOWED_SENDERS`, `TREASURER_EMAIL_POLL_MINUTES` | Email import (see below) |
 
 When Claude is on, receipt images, PDF statements and transaction descriptions are sent to Anthropic's API. The narrative prompt receives report totals but not donor names.
+
+## Emailing files in
+
+You can email attachments to a dedicated inbox, and the app imports them the same way as uploads.
+
+**Setup (Gmail):**
+
+1. Sign in to the Gmail account and turn on **2-Step Verification** (Google Account → Security).
+2. On the same page, create an **App password** named "Treasurer". Google shows 16 letters.
+3. In `.env`, set:
+   - `TREASURER_EMAIL_ADDRESS` to the Gmail address
+   - `TREASURER_EMAIL_APP_PASSWORD` to the 16 letters
+   - `TREASURER_EMAIL_ALLOWED_SENDERS` to the addresses you'll send from, separated by commas
+4. Restart the app.
+
+Gmail won't accept the account's regular password here, so you need the app password. Leave IMAP on in Gmail's settings (it is by default).
+
+**What happens to each attachment:**
+
+- **Photos and non-statement PDFs** become receipts. The subject and the first line of the message become the receipt's purpose, for example "Pizza for Tuesday worship".
+- **OFX/QFX files and bank CSVs** are imported as bank statements. Put **statement** in the subject for a PDF statement. Add **checking** or **savings** to the subject to label the account.
+- **Giving CSVs** are imported as gifts. They're recognized by their columns, or put **giving** or the platform name in the subject.
+
+**Security:**
+
+- Mail is accepted only from `TREASURER_EMAIL_ALLOWED_SENDERS`.
+- It must also pass Gmail's DMARC/DKIM sender checks, so a forged "From" address is rejected.
+- Each email is imported only once.
+- The Upload page shows a log of every email checked and what was done with it.
+
+**When the inbox is checked:**
+
+- When you click **Check email now** on the Upload page.
+- Every `TREASURER_EMAIL_POLL_MINUTES` minutes while the app is running.
+- When you run `python -m treasurer.mailbox` from cron or Task Scheduler. Add `--watch 10` to keep it running.
 
 ### Settings page
 

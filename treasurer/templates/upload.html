@@ -44,6 +44,41 @@
   </form>
 </div>
 
+
+<h2>By email</h2>
+<div class="panel">
+  {% if mail.configured %}
+  <div class="row">
+    <p style="margin:0;flex:1">Email receipts (photos or PDFs), bank statements and giving exports as attachments to
+      <b>{{ mail.address }}</b>.
+      {% if mail.poll_minutes %}The inbox is checked automatically every {{ mail.poll_minutes }} minutes.{% endif %}</p>
+    <form method="post" action="{{ url_for('main.check_email') }}">{{ csrf() }}<button>Check email now</button></form>
+  </div>
+  <ul class="small muted">
+    <li>Photos and PDFs become <b>receipts</b>. Put what the purchase was for in the subject or message (e.g. “Pizza for Tuesday worship”).</li>
+    <li>Put the word <b>statement</b> in the subject for PDF bank statements; CSV/OFX files are recognized automatically. Add “savings” or “checking” to the subject to label the account.</li>
+    <li>Put the word <b>giving</b> (or the platform name) in the subject for giving exports.</li>
+    <li>Only mail from these senders is accepted: {{ mail.allowed|join(', ') }}.</li>
+  </ul>
+  {% if mail_log %}
+  <div class="table-scroll">
+  <table class="small">
+    <thead><tr><th>Checked</th><th>From</th><th>Subject</th><th>Result</th></tr></thead>
+    <tbody>{% for m in mail_log %}
+      <tr><td style="white-space:nowrap">{{ m.checked_at }}</td><td>{{ m.sender }}</td><td>{{ m.subject }}</td>
+        <td><span class="chip {{ 'ok' if m.status == 'imported' else 'warn' if m.status in ('rejected','error') }}">{{ m.status.replace('_',' ') }}</span>
+          {% if m.detail %}<div class="muted" style="white-space:pre-line">{{ m.detail }}</div>{% endif %}</td></tr>
+    {% endfor %}</tbody>
+  </table>
+  </div>
+  {% endif %}
+  {% else %}
+  <p style="margin-top:0">You can email attachments to a dedicated inbox instead of uploading them here. To turn this on, set these environment variables on the server and restart it (see the README):</p>
+  <ul class="small">{% for m in mail.missing %}<li><code>{{ m }}</code></li>{% endfor %}</ul>
+  <p class="small muted">For Gmail, use an <b>app password</b> (Google Account → Security → 2-Step Verification → App passwords), not the account's regular password.</p>
+  {% endif %}
+</div>
+
 <div class="panel small">
   <h3 style="margin-top:0">How online giving is counted</h3>
   <p>Gifts are counted once, from the giving records (gross amount, by fund). When the platform later deposits a lump-sum payout in the bank, that deposit is categorized <b>Online Giving Payout</b> and isn't counted as income a second time. Platform fees appear under <b>Bank &amp; Processing Fees</b>. If you only upload bank statements, categorize those payouts as <b>Donations – Cash &amp; Check</b> (or another income category) instead.</p>

@@ -76,6 +76,16 @@ CREATE TABLE IF NOT EXISTS settings (
     value TEXT
 );
 
+CREATE TABLE IF NOT EXISTS email_log (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    message_id TEXT NOT NULL UNIQUE,
+    checked_at TEXT NOT NULL DEFAULT (datetime('now')),
+    sender TEXT,
+    subject TEXT,
+    status TEXT NOT NULL,            -- processing | imported | rejected | no_attachments | error
+    detail TEXT
+);
+
 CREATE TABLE IF NOT EXISTS narratives (
     month TEXT PRIMARY KEY,
     text TEXT NOT NULL,
