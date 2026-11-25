@@ -1,0 +1,51 @@
+{% extends "base.html" %}
+{% from "_macros.html" import csrf with context %}
+{% block title %}Upload{% endblock %}
+{% block content %}
+<h1>Upload</h1>
+<p class="muted">Re-uploading a file, or a statement that overlaps an earlier one, is safe. Rows already on file are skipped.</p>
+
+<div class="grid">
+  <form class="panel" method="post" action="{{ url_for('main.upload_bank') }}" enctype="multipart/form-data">
+    {{ csrf() }}
+    <h2 style="margin-top:0">Bank statements</h2>
+    <p class="small muted">From online banking, download transactions as <b>CSV</b> or <b>OFX/QFX</b> (Quicken/QuickBooks format).
+      {% if ai_enabled %}PDF statements work too: Claude reads them, so spot-check the totals.{% else %}PDF statements need the Claude integration turned on.{% endif %}</p>
+    <div class="field"><label>Files</label><input type="file" name="files" multiple accept=".csv,.ofx,.qfx,.qbo,.txt{% if ai_enabled %},.pdf{% endif %}" required></div>
+    <div class="field"><label>Account name (optional)</label><input type="text" name="account" placeholder="e.g. Operating checking"></div>
+    <button>Import bank transactions</button>
+  </form>
+
+  <form class="panel" method="post" action="{{ url_for('main.upload_giving') }}" enctype="multipart/form-data">
+    {{ csrf() }}
+    <h2 style="margin-top:0">Online giving records</h2>
+    <p class="small muted">The donations/transactions CSV export from your giving platform. Needs a date and amount column; donor, fund, and fee columns are used if present.</p>
+    <div class="field"><label>Files</label><input type="file" name="files" multiple accept=".csv,.txt" required></div>
+    <div class="field"><label>Platform</label>
+      <select name="platform">
+        <option value="">(not specified)</option>
+        {% for p in ['Tithe.ly','Pushpay','Givelify','PayPal','Planning Center','Vanco','Subsplash','Square','Stripe','Other'] %}<option>{{ p }}</option>{% endfor %}
+      </select></div>
+    <button>Import gifts</button>
+  </form>
+
+  <form class="panel" method="post" action="{{ url_for('main.upload_receipts') }}" enctype="multipart/form-data">
+    {{ csrf() }}
+    <h2 style="margin-top:0">Receipts</h2>
+    <p class="small muted">Photos (JPG, PNG, HEIC) or PDFs. Each one is matched to a bank charge with the same amount within a few days.</p>
+    <div class="field"><label>Files</label><input type="file" name="files" multiple accept="image/*,.pdf,.heic" required></div>
+    {% if ai_enabled %}
+    <label class="small"><input type="checkbox" name="read_with_ai" checked> Have Claude read vendor, date, and total</label><br><br>
+    {% else %}
+    <input type="hidden" name="read_with_ai" value="off">
+    <p class="small muted">You'll enter the date and total for each receipt on the next page.</p>
+    {% endif %}
+    <button>Upload receipts</button>
+  </form>
+</div>
+
+<div class="panel small">
+  <h3 style="margin-top:0">How online giving is counted</h3>
+  <p>Gifts are counted once, from the giving records (gross amount, by fund). When the platform later deposits a lump-sum payout in the bank, that deposit is categorized <b>Online Giving Payout</b> and isn't counted as income a second time. Platform fees appear under <b>Bank &amp; Processing Fees</b>. If you only upload bank statements, categorize those payouts as <b>Donations – Cash &amp; Check</b> (or another income category) instead.</p>
+</div>
+{% endblock %}

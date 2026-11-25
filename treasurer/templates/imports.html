@@ -1,0 +1,18 @@
+{% extends "base.html" %}
+{% from "_macros.html" import csrf with context %}
+{% block title %}Import history{% endblock %}
+{% block content %}
+<h1>Import history</h1>
+<div class="panel table-scroll">
+<table>
+  <thead><tr><th>When</th><th>Type</th><th>File</th><th class="num">Added</th><th class="num">Skipped</th><th></th></tr></thead>
+  <tbody>
+  {% for i in rows %}
+  <tr><td>{{ i.imported_at }}</td><td>{{ i.kind }}</td><td>{{ i.filename }}{% if i.note %}<div class="small muted">{{ i.note }}</div>{% endif %}</td>
+    <td class="num">{{ i.rows_added }}</td><td class="num">{{ i.rows_skipped }}</td>
+    <td><form method="post" action="{{ url_for('main.undo_import', import_id=i.id) }}" onsubmit="return confirm('Remove the {{ i.rows_added }} rows this file added?')">{{ csrf() }}<button class="danger">Undo</button></form></td></tr>
+  {% else %}<tr><td colspan="6" class="muted">Nothing imported yet.</td></tr>{% endfor %}
+  </tbody>
+</table>
+</div>
+{% endblock %}

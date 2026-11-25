@@ -1,0 +1,26 @@
+{% extends "base.html" %}
+{% from "_macros.html" import month_picker with context %}
+{% block title %}Giving{% endblock %}
+{% block content %}
+<h1>Online giving</h1>
+<div class="row" style="margin-bottom:12px">{{ month_picker(months, month, 'main.donations') }}</div>
+{% set ns = namespace(g=0, f=0, n=0) %}
+{% for d in rows %}{% set ns.g = ns.g + d.gross %}{% set ns.f = ns.f + d.fee %}{% set ns.n = ns.n + d.net %}{% endfor %}
+<div class="stats">
+  <div class="stat"><div class="label">Gifts</div><div class="value">{{ rows|length }}</div></div>
+  <div class="stat"><div class="label">Gross</div><div class="value">{{ ns.g|money }}</div></div>
+  <div class="stat"><div class="label">Fees</div><div class="value">{{ ns.f|money }}</div></div>
+  <div class="stat"><div class="label">Net</div><div class="value">{{ ns.n|money }}</div></div>
+</div>
+<div class="panel table-scroll">
+<table>
+  <thead><tr><th>Date</th><th>Donor</th><th>Fund</th><th class="hide-sm">Method</th><th class="num">Gross</th><th class="num">Fee</th><th class="num">Net</th></tr></thead>
+  <tbody>
+  {% for d in rows %}
+  <tr><td>{{ d.date }}</td><td>{{ d.donor }}</td><td>{{ d.fund }}</td><td class="hide-sm">{{ d.method or '' }}{% if d.platform %} <span class="chip">{{ d.platform }}</span>{% endif %}</td>
+    <td class="num">{{ d.gross|money }}</td><td class="num">{{ d.fee|money }}</td><td class="num">{{ d.net|money }}</td></tr>
+  {% else %}<tr><td colspan="7" class="muted">No gifts on file. <a href="{{ url_for('main.upload') }}">Upload a giving export</a>.</td></tr>{% endfor %}
+  </tbody>
+</table>
+</div>
+{% endblock %}

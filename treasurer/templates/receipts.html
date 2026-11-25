@@ -1,0 +1,59 @@
+{% extends "base.html" %}
+{% from "_macros.html" import csrf with context %}
+{% block title %}Receipts{% endblock %}
+{% block content %}
+{% set back = request.full_path %}
+<h1>Receipts</h1>
+<div class="row" style="margin-bottom:12px">
+  <a class="btn {{ '' if not flt else 'secondary' }}" href="{{ url_for('main.receipts') }}">All</a>
+  <a class="btn {{ '' if flt == 'unmatched' else 'secondary' }}" href="{{ url_for('main.receipts', filter='unmatched') }}">Not matched</a>
+  <a class="btn secondary" href="{{ url_for('main.upload') }}">Upload more</a>
+</div>
+{% for r in rows %}
+<div class="panel receipt-card">
+  <a class="thumb" href="{{ url_for('main.receipt_file', rid=r.id) }}" target="_blank">
+    {% if r.stored_name.endswith(('.jpg','.jpeg','.png','.gif','.webp')) %}
+      <img class="thumb" src="{{ url_for('main.receipt_file', rid=r.id) }}" alt="Receipt {{ r.original_name }}">
+    {% else %}{{ r.original_name.rsplit('.',1)[-1]|upper }} · open{% endif %}
+  </a>
+  <div>
+    <form method="post" action="{{ url_for('main.update_receipt', rid=r.id) }}">
+      {{ csrf() }}<input type="hidden" name="back" value="{{ back }}">
+      <div class="fields">
+        <div class="field"><label>Vendor</label><input type="text" name="vendor" value="{{ r.vendor or '' }}"></div>
+        <div class="field"><label>Date</label><input type="date" name="date" value="{{ r.date or '' }}"></div>
+        <div class="field"><label>Total</label><input type="text" name="amount" inputmode="decimal" value="{{ '%.2f'|format(r.amount) if r.amount is not none else '' }}"></div>
+        <div class="field"><label>Category</label>
+          <select name="category"><option value="">—</option>{% for c in categories %}<option {{ 'selected' if c == r.category }}>{{ c }}</option>{% endfor %}</select></div>
+      </div>
+      <div class="field"><label>Purpose / notes</label><input type="text" name="purpose" value="{{ r.purpose or '' }}" placeholder="e.g. Pizza for Tuesday night worship"></div>
+      <div class="row"><button>Save</button><span class="small muted">{{ r.original_name }}</span></div>
+    </form>
+    <div style="margin-top:10px">
+    {% if r.transaction_id %}
+      <span class="chip ok">✓ Matched</span>
+      <span class="small">{{ r.tx_date }} · {{ r.tx_description }} · {{ r.tx_amount|money }}</span>
+      <form method="post" action="{{ url_for('main.match_receipt', rid=r.id) }}" class="inline">{{ csrf() }}<input type="hidden" name="back" value="{{ back }}"><input type="hidden" name="transaction_id" value=""><button class="link small">unmatch</button></form>
+    {% else %}
+      {% set c = cands.get(r.id, []) %}
+      {% if c %}
+      <form method="post" action="{{ url_for('main.match_receipt', rid=r.id) }}" class="row">
+        {{ csrf() }}<input type="hidden" name="back" value="{{ back }}">
+        <select name="transaction_id">{% for t in c %}<option value="{{ t.id }}">{{ t.date }} · {{ t.description[:50] }} · {{ t.amount|money }}</option>{% endfor %}</select>
+        <button class="secondary">Match</button>
+      </form>
+      {% elif r.amount is none %}
+      <span class="chip warn">Enter the total to match this receipt</span>
+      {% else %}
+      <span class="chip warn">No bank charge for {{ r.amount|money }} near this date yet</span>
+      <span class="small muted">It will match automatically once that statement is uploaded.</span>
+      {% endif %}
+    {% endif %}
+      <form method="post" action="{{ url_for('main.delete_receipt', rid=r.id) }}" class="inline" onsubmit="return confirm('Delete this receipt?')">{{ csrf() }}<button class="link small" style="color:var(--bad);margin-left:10px">delete</button></form>
+    </div>
+  </div>
+</div>
+{% else %}
+<div class="panel muted">No receipts{% if flt %} waiting to be matched{% endif %}. <a href="{{ url_for('main.upload') }}">Upload receipts</a>.</div>
+{% endfor %}
+{% endblock %}

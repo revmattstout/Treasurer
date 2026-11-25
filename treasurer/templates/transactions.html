@@ -1,0 +1,54 @@
+{% extends "base.html" %}
+{% from "_macros.html" import csrf, month_picker with context %}
+{% block title %}Transactions{% endblock %}
+{% block content %}
+{% set back = request.full_path %}
+<h1>Transactions</h1>
+<div class="row no-print" style="margin-bottom:12px">
+  {{ month_picker(months, month, 'main.transactions', {'filter': flt, 'q': q}) }}
+  <a class="btn {{ '' if not flt else 'secondary' }}" href="{{ url_for('main.transactions', month=month) }}">All</a>
+  <a class="btn {{ '' if flt == 'uncategorized' else 'secondary' }}" href="{{ url_for('main.transactions', month=month, filter='uncategorized') }}">Uncategorized</a>
+  <a class="btn {{ '' if flt == 'no_receipt' else 'secondary' }}" href="{{ url_for('main.transactions', month=month, filter='no_receipt') }}">Withdrawals without receipt</a>
+  <form method="get" class="inline"><input type="hidden" name="month" value="{{ month }}"><input type="hidden" name="filter" value="{{ flt }}">
+    <input type="search" name="q" value="{{ q }}" placeholder="Search descriptions"></form>
+  <span style="flex:1"></span>
+  <form method="post" action="{{ url_for('main.run_rules') }}" class="inline">{{ csrf() }}<input type="hidden" name="back" value="{{ back }}"><button class="secondary">Re-apply rules</button></form>
+  {% if ai_enabled %}
+  <form method="post" action="{{ url_for('main.suggest') }}" class="inline">{{ csrf() }}<input type="hidden" name="back" value="{{ back }}"><button>Suggest categories with Claude</button></form>
+  {% endif %}
+</div>
+<p class="small muted">Pick a category to save it. Check <b>always</b> first to create a rule, so future transactions from the same payee are categorized automatically.</p>
+<div class="panel table-scroll">
+<table>
+  <thead><tr><th>Date</th><th>Description</th><th class="num">Amount</th><th>Category</th><th class="hide-sm">Receipt</th></tr></thead>
+  <tbody>
+  {% for t in rows %}
+  <tr>
+    <td style="white-space:nowrap">{{ t.date }}</td>
+    <td>{{ t.description }}{% if t.account %} <span class="chip">{{ t.account }}</span>{% endif %}
+      {% if t.notes %}<div class="small muted">{{ t.notes }}</div>{% endif %}</td>
+    <td class="num {{ 'pos' if t.amount > 0 }}">{{ t.amount|money }}</td>
+    <td>
+      <form method="post" action="{{ url_for('main.set_category', tx_id=t.id) }}" class="row" style="gap:6px">
+        {{ csrf() }}<input type="hidden" name="back" value="{{ back }}">
+        <select name="category" onchange="this.form.submit()">
+          <option value="">— Uncategorized —</option>
+          {% set grp = namespace(k=None) %}
+          {% for c in categories %}
+            {% if c.kind != grp.k %}{% if grp.k %}</optgroup>{% endif %}<optgroup label="{{ {'income':'Income','payout':'Online giving payout','transfer':'Transfer','expense':'Expense'}[c.kind] }}">{% set grp.k = c.kind %}{% endif %}
+            <option {{ 'selected' if c.name == t.category }}>{{ c.name }}</option>
+          {% endfor %}</optgroup>
+        </select>
+        <label class="small muted"><input type="checkbox" name="remember"> always</label>
+        {% if t.category_source == 'ai' %}<span class="chip ai" title="Suggested by Claude, please review">AI</span>{% endif %}
+      </form>
+    </td>
+    <td class="hide-sm">{% if t.receipt_id %}<a class="chip ok" href="{{ url_for('main.receipt_file', rid=t.receipt_id) }}" target="_blank">✓ receipt</a>{% elif t.amount < 0 %}<span class="chip">none</span>{% endif %}</td>
+  </tr>
+  {% else %}
+  <tr><td colspan="5" class="muted">No transactions{% if flt %} match this filter{% endif %}.</td></tr>
+  {% endfor %}
+  </tbody>
+</table>
+</div>
+{% endblock %}

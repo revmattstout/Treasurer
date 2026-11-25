@@ -1,0 +1,72 @@
+{% extends "base.html" %}
+{% from "_macros.html" import csrf with context %}
+{% block title %}Settings{% endblock %}
+{% block content %}
+<h1>Settings</h1>
+<div class="grid">
+  <form class="panel" method="post">
+    {{ csrf() }}<input type="hidden" name="action" value="general">
+    <h2 style="margin-top:0">General</h2>
+    <div class="field"><label>Organization name</label><input type="text" name="org_name" value="{{ st.org_name }}"></div>
+    <div class="field"><label>Fiscal year starts in</label>
+      <select name="fiscal_year_start_month">{% for i in range(1,13) %}<option value="{{ i }}" {{ 'selected' if i|string == st.fiscal_year_start_month }}>{{ ['January','February','March','April','May','June','July','August','September','October','November','December'][i-1] }}</option>{% endfor %}</select></div>
+    <div class="field"><label>Flag withdrawals without a receipt at or above ($)</label><input type="number" step="0.01" min="0" name="receipt_required_over" value="{{ st.receipt_required_over }}"></div>
+    <button>Save</button>
+  </form>
+
+  <form class="panel" method="post">
+    {{ csrf() }}<input type="hidden" name="action" value="add_category">
+    <h2 style="margin-top:0">Add a category</h2>
+    <div class="field"><label>Name</label><input type="text" name="name" required></div>
+    <div class="field"><label>Type</label>
+      <select name="kind"><option value="expense">Expense</option><option value="income">Income</option>
+        <option value="payout">Online giving payout (not counted as income)</option><option value="transfer">Transfer (ignored)</option></select></div>
+    <button>Add category</button>
+  </form>
+</div>
+
+<h2>Categories &amp; monthly budgets</h2>
+<form class="panel table-scroll" method="post">
+  {{ csrf() }}<input type="hidden" name="action" value="budgets">
+  <table>
+    <thead><tr><th>Category</th><th>Type</th><th>Monthly budget</th></tr></thead>
+    <tbody>
+    {% for c in categories %}
+      <tr><td>{{ c.name }}</td><td><span class="chip">{{ c.kind }}</span></td>
+        <td>{% if c.kind in ('income','expense') %}<input type="text" inputmode="decimal" name="budget_{{ c.name }}" value="{{ '%.2f'|format(c.monthly_budget) if c.monthly_budget is not none else '' }}" style="width:120px">{% endif %}</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  <br><button>Save budgets</button>
+</form>
+
+<details class="panel">
+  <summary>Rename or delete a category</summary>
+  <div class="row" style="margin-top:10px">
+    <form method="post" class="row">{{ csrf() }}<input type="hidden" name="action" value="rename_category">
+      <select name="old">{% for c in categories %}<option>{{ c.name }}</option>{% endfor %}</select>
+      <input type="text" name="new" placeholder="New name" required><button class="secondary">Rename</button></form>
+    <form method="post" class="row">{{ csrf() }}<input type="hidden" name="action" value="delete_category">
+      <select name="name">{% for c in categories %}<option>{{ c.name }}</option>{% endfor %}</select>
+      <button class="danger">Delete</button></form>
+  </div>
+</details>
+
+<h2>Categorization rules</h2>
+<p class="small muted">If a bank description contains the text, it gets the category. Income rules only apply to deposits and expense rules only to withdrawals. Categories you pick by hand are never overwritten.</p>
+<form class="panel row" method="post">
+  {{ csrf() }}<input type="hidden" name="action" value="add_rule">
+  <input type="text" name="pattern" placeholder="Description contains… e.g. PUBLIX" required>
+  <select name="category">{% for c in categories %}<option>{{ c.name }}</option>{% endfor %}</select>
+  <button>Add rule</button>
+</form>
+<div class="panel table-scroll">
+<table>
+  <thead><tr><th>Contains</th><th>Category</th><th></th></tr></thead>
+  <tbody>{% for r in rules %}
+  <tr><td><code>{{ r.pattern }}</code></td><td>{{ r.category }}</td>
+    <td><form method="post" class="inline">{{ csrf() }}<input type="hidden" name="action" value="delete_rule"><input type="hidden" name="id" value="{{ r.id }}"><button class="link small">delete</button></form></td></tr>
+  {% endfor %}</tbody>
+</table>
+</div>
+{% endblock %}

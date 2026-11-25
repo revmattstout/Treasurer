@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{% block title %}Treasurer{% endblock %} · {{ org_name }}</title>
+<link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+{% if request.endpoint != 'main.login' %}
+<header class="top">
+  <div class="wrap">
+    <a class="brand" href="{{ url_for('main.index') }}">{{ org_name }} · Treasurer</a>
+    <nav>
+      {% set ep = request.endpoint %}
+      <a href="{{ url_for('main.upload') }}" class="{{ 'on' if ep == 'main.upload' }}">Upload</a>
+      <a href="{{ url_for('main.transactions') }}" class="{{ 'on' if ep == 'main.transactions' }}">Transactions</a>
+      <a href="{{ url_for('main.donations') }}" class="{{ 'on' if ep == 'main.donations' }}">Giving</a>
+      <a href="{{ url_for('main.receipts') }}" class="{{ 'on' if ep == 'main.receipts' }}">Receipts</a>
+      <a href="{{ url_for('main.reports') }}" class="{{ 'on' if ep == 'main.report' }}">Reports</a>
+      <a href="{{ url_for('main.settings') }}" class="{{ 'on' if ep == 'main.settings' }}">Settings</a>
+    </nav>
+    {% if login_required %}
+    <form method="post" action="{{ url_for('main.logout') }}"><input type="hidden" name="csrf" value="{{ csrf_token }}"><button class="secondary">Sign out</button></form>
+    {% endif %}
+  </div>
+</header>
+{% endif %}
+<main class="wrap">
+  {% for cat, msg in get_flashed_messages(with_categories=true) %}
+  <div class="flash {{ cat }}">{{ msg }}</div>
+  {% endfor %}
+  {% block content %}{% endblock %}
+</main>
+</body>
+</html>

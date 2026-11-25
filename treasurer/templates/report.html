@@ -1,0 +1,143 @@
+{% extends "base.html" %}
+{% from "_macros.html" import csrf with context %}
+{% block title %}{{ r.month|month_name }} report{% endblock %}
+{% block content %}
+{% set s = r.summary %}
+<div class="report-head">
+  <div>
+    <div class="muted">{{ org_name }}</div>
+    <h1 style="margin:0">Treasurer's Report: {{ r.month|month_name }}</h1>
+    <div class="small muted">{{ r.period.start }} to {{ r.period.end }} · fiscal year to date from {{ r.fiscal_year_start }}</div>
+  </div>
+  <div class="row no-print">
+    <form method="get" class="inline" onsubmit="location.href='{{ url_for('main.reports') }}/'+this.m.value;return false">
+      <select name="m" onchange="this.form.onsubmit()">{% for m in months %}<option value="{{ m }}" {{ 'selected' if m == r.month }}>{{ m|month_name }}</option>{% endfor %}</select>
+    </form>
+    <button class="secondary" onclick="window.print()">Print / save PDF</button>
+    <a class="btn secondary" href="{{ url_for('main.report_csv', month=r.month) }}">Download CSV</a>
+  </div>
+</div>
+
+{% if r.uncategorized %}
+<div class="callout no-print">{{ r.uncategorized|length }} transaction{{ 's' if r.uncategorized|length != 1 }} this month {{ 'are' if r.uncategorized|length != 1 else 'is' }} uncategorized and shown as “Uncategorized” below.
+  <a href="{{ url_for('main.transactions', month=r.month, filter='uncategorized') }}">Categorize them</a> for an accurate report.</div>
+{% endif %}
+
+<div class="stats" style="margin-top:16px">
+  <div class="stat"><div class="label">Income</div><div class="value">{{ s.income|money }}</div><div class="sub">prior month {{ s.prior_income|money }}</div></div>
+  <div class="stat"><div class="label">Expenses</div><div class="value">{{ s.expense|money }}</div><div class="sub">prior month {{ s.prior_expense|money }}</div></div>
+  <div class="stat"><div class="label">Net</div><div class="value {{ 'pos' if s.net >= 0 else 'neg' }}">{{ s.net|money }}</div><div class="sub">fiscal YTD {{ s.ytd_net|money }}</div></div>
+  <div class="stat"><div class="label">Ending bank balance</div><div class="value">{{ r.bank.ending_balance|money }}</div><div class="sub">{% if r.bank.ending_balance is none %}statement had no balance column{% else %}beginning {{ r.bank.beginning_balance|money }}{% endif %}</div></div>
+</div>
+
+<div class="panel narrative">
+  <h2 style="margin-top:0">Summary</h2>
+  {% if narrative %}
+    {% for para in narrative.text.split('\n') if para.strip() %}<p>{{ para }}</p>{% endfor %}
+  {% else %}
+    <p class="muted no-print">No narrative yet.</p>
+  {% endif %}
+  <details class="no-print">
+    <summary class="small">{{ 'Edit' if narrative else 'Write' }} narrative</summary>
+    <form method="post" action="{{ url_for('main.report_narrative', month=r.month) }}">
+      {{ csrf() }}<textarea name="text">{{ narrative.text if narrative else '' }}</textarea>
+      <button>Save narrative</button>
+    </form>
+  </details>
+  {% if ai_enabled %}
+  <form method="post" action="{{ url_for('main.report_narrative', month=r.month) }}" class="no-print" style="margin-top:8px">
+    {{ csrf() }}<button class="secondary">{{ 'Redraft' if narrative else 'Draft' }} with Claude</button>
+    <span class="small muted">Claude sees the totals on this page, but not donor names.</span>
+  </form>
+  {% endif %}
+</div>
+
+<h2>Statement of activities</h2>
+<div class="panel table-scroll">
+<table>
+  <thead><tr><th></th><th class="num">This month</th><th class="num">Prior month</th><th class="num">Fiscal YTD</th><th class="num">Monthly budget</th><th class="num">Under / (over)</th></tr></thead>
+  <tbody>
+    <tr class="sub"><td colspan="6">Income</td></tr>
+    {% for f in r.giving.by_fund %}
+    <tr><td>Online giving: {{ f.name }}</td><td class="num">{{ f.amount|money }}</td><td class="num">{{ f.prior|money }}</td><td class="num">{{ f.ytd|money }}</td><td></td><td></td></tr>
+    {% endfor %}
+    {% for l in r.other_income %}
+    <tr><td>{{ l.name }}</td><td class="num">{{ l.amount|money }}</td><td class="num">{{ l.prior|money }}</td><td class="num">{{ l.ytd|money }}</td><td class="num">{{ l.budget|money if l.budget }}</td><td></td></tr>
+    {% endfor %}
+    <tr class="total"><td>Total income</td><td class="num">{{ s.income|money }}</td><td class="num">{{ s.prior_income|money }}</td><td class="num">{{ s.ytd_income|money }}</td><td></td><td></td></tr>
+
+    <tr class="sub"><td colspan="6">Expenses</td></tr>
+    {% for l in r.expenses %}
+    <tr><td>{{ l.name }}</td><td class="num">{{ l.amount|money }}</td><td class="num">{{ l.prior|money }}</td><td class="num">{{ l.ytd|money }}</td>
+      <td class="num">{{ l.budget|money if l.budget }}</td>
+      <td class="num {{ 'neg' if l.variance is not none and l.variance < 0 }}">{{ l.variance|money if l.variance is not none }}</td></tr>
+    {% else %}<tr><td colspan="6" class="muted">No expenses this month.</td></tr>{% endfor %}
+    <tr class="total"><td>Total expenses</td><td class="num">{{ s.expense|money }}</td><td class="num">{{ s.prior_expense|money }}</td><td class="num">{{ s.ytd_expense|money }}</td><td></td><td></td></tr>
+
+    <tr class="total"><td>Net income (loss)</td><td class="num {{ 'neg' if s.net < 0 }}">{{ s.net|money }}</td><td class="num {{ 'neg' if s.prior_net < 0 }}">{{ s.prior_net|money }}</td><td class="num {{ 'neg' if s.ytd_net < 0 }}">{{ s.ytd_net|money }}</td><td></td><td></td></tr>
+  </tbody>
+</table>
+</div>
+
+<div class="grid">
+  <div class="panel">
+    <h3 style="margin-top:0">Bank activity</h3>
+    <table>
+      <tr><td>Beginning balance</td><td class="num">{{ r.bank.beginning_balance|money }}</td></tr>
+      <tr><td>Deposits</td><td class="num">{{ r.bank.deposits|money }}</td></tr>
+      <tr><td>Withdrawals</td><td class="num">({{ r.bank.withdrawals|money }})</td></tr>
+      <tr class="total"><td>Ending balance</td><td class="num">{{ r.bank.ending_balance|money }}</td></tr>
+    </table>
+    {% if r.bank.accounts|length > 1 %}
+    <table class="small" style="margin-top:8px">
+      <thead><tr><th>Account</th><th class="num">Beginning</th><th class="num">Change</th><th class="num">Ending</th></tr></thead>
+      {% for a in r.bank.accounts %}<tr><td>{{ a.name }}</td><td class="num">{{ a.beginning|money }}</td><td class="num">{{ a.change|money }}</td><td class="num">{{ a.ending|money }}</td></tr>{% endfor %}
+    </table>
+    {% endif %}
+    {% if r.bank.balance_incomplete %}<p class="small neg">Some accounts' statements had no balance column, so the balances above leave them out.</p>{% endif %}
+    <p class="small muted">{{ r.bank.transaction_count }} bank transactions.{% if r.transfers_net %} Includes {{ r.transfers_net|money }} net transfers between accounts (not income or expense).{% endif %}</p>
+  </div>
+  <div class="panel">
+    <h3 style="margin-top:0">Online giving</h3>
+    <table>
+      <tr><td>Gifts received</td><td class="num">{{ r.giving.gifts }}</td></tr>
+      <tr><td>Named donors</td><td class="num">{{ r.giving.donors }}</td></tr>
+      <tr><td>Average gift</td><td class="num">{{ r.giving.average_gift|money }}</td></tr>
+      <tr><td>Gross given</td><td class="num">{{ r.giving.total|money }}</td></tr>
+      <tr><td>Processing fees</td><td class="num">({{ r.giving.fees|money }})</td></tr>
+      <tr><td>Net of fees</td><td class="num">{{ r.giving.net|money }}</td></tr>
+      <tr><td>Payouts deposited in bank</td><td class="num">{{ r.giving.payouts_deposited|money }}</td></tr>
+    </table>
+    {% if r.giving.timing_difference|abs > 0.009 %}
+    <p class="small muted">Difference of {{ r.giving.timing_difference|money }} between net gifts and payouts deposited. This is usually timing: gifts at month-end are paid out the next month. A difference that persists may mean a missing payout.</p>
+    {% endif %}
+  </div>
+</div>
+
+<h2 id="receipts">Receipts</h2>
+<div class="panel">
+  <p>{{ r.receipts.receipted_count }} of {{ r.receipts.expense_count }} withdrawals have a receipt on file.
+  {% if r.receipts.missing %}<b>{{ r.receipts.missing|length }}</b> withdrawal{{ 's' if r.receipts.missing|length != 1 }} of {{ r.receipts.threshold|money }} or more ({{ r.receipts.missing_total|money }} total) {{ 'are' if r.receipts.missing|length != 1 else 'is' }} missing a receipt.{% else %}All withdrawals of {{ r.receipts.threshold|money }} or more have receipts.{% endif %}
+  {% if r.receipts.unmatched_receipts %}<span class="no-print">{{ r.receipts.unmatched_receipts }} uploaded receipt(s) <a href="{{ url_for('main.receipts', filter='unmatched') }}">still need matching</a>.</span>{% endif %}</p>
+  {% if r.receipts.missing %}
+  <div class="table-scroll">
+  <table>
+    <thead><tr><th>Date</th><th>Description</th><th>Category</th><th class="num">Amount</th></tr></thead>
+    <tbody>{% for m in r.receipts.missing %}<tr><td>{{ m.date }}</td><td>{{ m.description }}</td><td>{{ m.category or 'Uncategorized' }}</td><td class="num">{{ (-m.amount)|money }}</td></tr>{% endfor %}</tbody>
+  </table>
+  </div>
+  {% endif %}
+</div>
+
+{% if r.top_payees %}
+<h2>Largest payees</h2>
+<div class="panel table-scroll">
+<table>
+  <thead><tr><th>Payee</th><th class="num">Transactions</th><th class="num">Total</th></tr></thead>
+  <tbody>{% for p in r.top_payees %}<tr><td>{{ p.name }}</td><td class="num">{{ p.count }}</td><td class="num">{{ p.amount|money }}</td></tr>{% endfor %}</tbody>
+</table>
+</div>
+{% endif %}
+
+<p class="small muted">Cash basis. Prepared from bank statements, online giving records, and receipts on file.</p>
+{% endblock %}

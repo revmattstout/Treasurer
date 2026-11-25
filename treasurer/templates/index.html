@@ -1,0 +1,52 @@
+{% extends "base.html" %}
+{% block title %}Dashboard{% endblock %}
+{% block content %}
+<h1>Dashboard</h1>
+
+{% if not months %}
+<div class="panel">
+  <h2 style="margin-top:0">Get started</h2>
+  <ol>
+    <li><a href="{{ url_for('main.upload') }}">Upload</a> a bank statement (CSV or OFX/QFX from online banking{% if ai_enabled %}, or a PDF statement{% endif %}).</li>
+    <li>Upload your online giving export (Tithe.ly, Pushpay, Givelify, PayPal, Planning Center… as CSV).</li>
+    <li>Upload receipts. They're matched to bank charges automatically by amount and date.</li>
+    <li>Review anything <a href="{{ url_for('main.transactions', filter='uncategorized') }}">uncategorized</a>, then open the monthly report.</li>
+  </ol>
+  <p class="muted small">Tip: set monthly budgets per category under <a href="{{ url_for('main.settings') }}">Settings</a> to get budget-vs-actual on every report.</p>
+</div>
+{% else %}
+<div class="stats">
+  <div class="stat"><div class="label">{{ latest.month|month_name }} income</div><div class="value">{{ latest.summary.income|money }}</div></div>
+  <div class="stat"><div class="label">{{ latest.month|month_name }} expenses</div><div class="value">{{ latest.summary.expense|money }}</div></div>
+  <div class="stat"><div class="label">Net</div><div class="value {{ 'pos' if latest.summary.net >= 0 else 'neg' }}">{{ latest.summary.net|money }}</div></div>
+  <div class="stat"><div class="label">Fiscal YTD net</div><div class="value {{ 'pos' if latest.summary.ytd_net >= 0 else 'neg' }}">{{ latest.summary.ytd_net|money }}</div></div>
+</div>
+
+<div class="grid">
+  <div class="panel">
+    <h3 style="margin-top:0">Needs attention</h3>
+    <ul>
+      <li><a href="{{ url_for('main.transactions', filter='uncategorized') }}">{{ counts.uncategorized }} uncategorized transaction{{ 's' if counts.uncategorized != 1 }}</a></li>
+      <li><a href="{{ url_for('main.receipts', filter='unmatched') }}">{{ counts.unmatched_receipts }} receipt{{ 's' if counts.unmatched_receipts != 1 }} not matched to a bank charge</a></li>
+      <li><a href="{{ url_for('main.report', month=latest.month) }}#receipts">{{ latest.receipts.missing|length }} expense{{ 's' if latest.receipts.missing|length != 1 }} in {{ latest.month|month_name }} missing a receipt</a></li>
+    </ul>
+  </div>
+  <div class="panel">
+    <h3 style="margin-top:0">Monthly reports</h3>
+    <ul>
+      {% for m in months[:12] %}<li><a href="{{ url_for('main.report', month=m) }}">{{ m|month_name }}</a></li>{% endfor %}
+    </ul>
+  </div>
+  <div class="panel">
+    <h3 style="margin-top:0">Data on file</h3>
+    <ul class="small">
+      <li>{{ counts.transactions }} bank transactions</li>
+      <li>{{ counts.donations }} online gifts</li>
+      <li>{{ counts.receipts }} receipts</li>
+    </ul>
+    <p class="small muted">Claude integration: {{ 'on' if ai_enabled else 'off (set ANTHROPIC_API_KEY to read receipts & PDFs automatically)' }}</p>
+    <p class="small"><a href="{{ url_for('main.imports') }}">Import history</a></p>
+  </div>
+</div>
+{% endif %}
+{% endblock %}

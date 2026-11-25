@@ -1,0 +1,14 @@
+{% extends "base.html" %}
+{% from "_macros.html" import csrf with context %}
+{% block title %}Sign in{% endblock %}
+{% block content %}
+<div class="panel" style="max-width:380px;margin:60px auto">
+  <h1>{{ org_name }}</h1>
+  <p class="muted">Treasurer's reports. Sign in to continue.</p>
+  <form method="post">
+    {{ csrf() }}
+    <div class="field"><label for="pw">Password</label><input id="pw" type="password" name="password" autofocus></div>
+    <button>Sign in</button>
+  </form>
+</div>
+{% endblock %}
