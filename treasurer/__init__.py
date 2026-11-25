@@ -76,7 +76,10 @@ def create_app(test_config=None):
     if (app.config.get("EMAIL_POLLER", True) and not app.config.get("TESTING")
             and (os.environ.get("FLASK_DEBUG") != "1" or os.environ.get("WERKZEUG_RUN_MAIN") == "true")):
         from .mailbox import start_poller
+        from .mailer import configured as mailer_configured, start_scheduler
         start_poller(app)
+        if mailer_configured():
+            start_scheduler(app)
 
     @app.template_filter("money")
     def money(v):

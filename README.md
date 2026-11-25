@@ -86,6 +86,31 @@ Gmail won't accept the account's regular password here, so you need the app pass
 - Every `TREASURER_EMAIL_POLL_MINUTES` minutes while the app is running.
 - When you run `python -m treasurer.mailbox` from cron or Task Scheduler. Add `--watch 10` to keep it running.
 
+## Monthly report email
+
+On the **third Wednesday of each month** at 8 AM Eastern, last month's report is emailed to **revmattstout@gmail.com**. You can change the recipients, send time, or turn it off under **Settings → Monthly report email**.
+
+**What's in the email:**
+
+- The summary numbers, the statement of activities, bank and giving totals, and the list of expenses missing receipts.
+- The summary narrative, if you've written one. If you haven't and Claude is on, Claude drafts one, labeled as a draft.
+- Attachments: the transaction detail (CSV) and the full report (HTML).
+- If nothing has been uploaded for that month yet, the email arrives as a "(no data yet)" reminder instead.
+
+The email uses the Gmail account and app password from the email-import setup above. Sending is set up as soon as `TREASURER_EMAIL_ADDRESS` and `TREASURER_EMAIL_APP_PASSWORD` are set.
+
+**When it goes out:**
+
+- While the app is running. If the computer was off on the day, the report goes out the next time the app runs that month.
+- Each report is sent automatically only once. A failed send is retried up to 3 times, and the history is shown on the Settings page.
+- If the app isn't always running, schedule `python -m treasurer.mailer` to run daily (cron or Task Scheduler). It only sends when a report is due.
+- To send one right away, use **Email this report** on any report page, or run `python -m treasurer.mailer --month 2026-10 --now`.
+
+Optional settings:
+
+- `TREASURER_APP_URL` (e.g. `http://192.168.1.20:5000`) adds a link back to the app in the email.
+- `TREASURER_TIMEZONE` changes the time zone (default `America/New_York`).
+
 ### Settings page
 
 - Organization name and fiscal-year start month (e.g. July for an academic year)

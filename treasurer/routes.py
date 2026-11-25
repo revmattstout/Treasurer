@@ -12,7 +12,7 @@ from .categorize import apply_rules, rule_pattern_from_description
 from .db import get_db, get_setting, set_setting
 from .importers import ImportError_, parse_date, parse_amount
 from .receipts import auto_match, candidates
-from .reports import available_months, build_report, report_for_ai
+from .reports import available_months, build_report, report_csv_text, report_for_ai
 
 bp = Blueprint("main", __name__)
 MONTH_RE = re.compile(r"^\d{4}-\d{2}$")
@@ -406,36 +406,27 @@ def report_narrative(month):
     return redirect(url_for("main.report", month=month))
 
 
+@bp.route("/reports/<month>/email", methods=["POST"])
+def report_email(month):
+    from . import mailer
+    conn = get_db()
+    _check_month(month)
+    try:
+        mailer.send_report(current_app._get_current_object(), conn, month)
+    except mailer.MailerError as e:
+        flash(f"Couldn't email the report: {e}", "error")
+    else:
+        flash(f"Emailed the {month} report to {', '.join(mailer.recipients(conn))}.", "success")
+    return redirect(url_for("main.report", month=month))
+
+
 @bp.route("/reports/<month>.csv")
 def report_csv(month):
     conn = get_db()
     _check_month(month)
-    rep = build_report(conn, month)
-    buf = io.StringIO()
-    w = csv.writer(buf)
-    w.writerow([f"{get_setting(conn, 'org_name')} — Monthly Report", month])
-    w.writerow([])
-    w.writerow(["Section", "Line", "This month", "Prior month", "Fiscal YTD", "Monthly budget"])
-    for f in rep["giving"]["by_fund"]:
-        w.writerow(["Income: online giving", f["name"], f["amount"], f["prior"], f["ytd"], ""])
-    for l in rep["other_income"]:
-        w.writerow(["Income: other", l["name"], l["amount"], l["prior"], l["ytd"], l["budget"] or ""])
-    for l in rep["expenses"]:
-        w.writerow(["Expense", l["name"], l["amount"], l["prior"], l["ytd"], l["budget"] or ""])
-    s = rep["summary"]
-    w.writerow(["Total", "Income", s["income"], s["prior_income"], s["ytd_income"], ""])
-    w.writerow(["Total", "Expenses", s["expense"], s["prior_expense"], s["ytd_expense"], ""])
-    w.writerow(["Total", "Net", s["net"], s["prior_net"], s["ytd_net"], ""])
-    w.writerow([])
-    w.writerow(["Transactions"])
-    w.writerow(["Date", "Description", "Amount", "Category", "Receipt", "Notes"])
-    for t in conn.execute(
-            "SELECT t.*, r.id rid FROM transactions t LEFT JOIN receipts r ON r.transaction_id=t.id "
-            "WHERE substr(t.date,1,7)=? ORDER BY t.date, t.id", (month,)):
-        w.writerow([t["date"], t["description"], t["amount"], t["category"] or "Uncategorized",
-                    "yes" if t["rid"] else "", t["notes"] or ""])
-    return Response(buf.getvalue(), mimetype="text/csv",
+    return Response(report_csv_text(conn, month), mimetype="text/csv",
                     headers={"Content-Disposition": f"attachment; filename=wesley-report-{month}.csv"})
+
 
 
 # ---------------------------------------------------------------- settings
@@ -452,6 +443,18 @@ def settings():
             thr = request.form.get("receipt_required_over", type=float)
             set_setting(conn, "receipt_required_over", str(thr if thr is not None else 25))
             flash("Settings saved.", "success")
+        elif action == "report_email":
+            raw = request.form.get("report_recipients", "")
+            addrs = [a.strip() for a in raw.replace(";", ",").split(",") if a.strip()]
+            bad = [a for a in addrs if not re.fullmatch(r"[^@\s,]+@[^@\s,]+\.[^@\s,]+", a)]
+            if bad:
+                flash("Not a valid email address: " + ", ".join(bad), "error")
+                return redirect(url_for("main.settings"))
+            set_setting(conn, "report_recipients", ", ".join(addrs))
+            set_setting(conn, "report_schedule_enabled", "1" if request.form.get("enabled") else "0")
+            hour = request.form.get("report_send_hour", type=int)
+            set_setting(conn, "report_send_hour", str(min(max(hour if hour is not None else 8, 0), 23)))
+            flash("Report email settings saved.", "success")
         elif action == "budgets":
             for c in _categories(conn):
                 v = request.form.get(f"budget_{c['name']}", "").strip()
@@ -496,9 +499,14 @@ def settings():
             flash("Rule deleted.", "success")
         conn.commit()
         return redirect(url_for("main.settings"))
+    from . import mailer
     rules = conn.execute("SELECT * FROM rules ORDER BY category, pattern").fetchall()
-    st = {k: get_setting(conn, k) for k in ("org_name", "fiscal_year_start_month", "receipt_required_over")}
-    return render_template("settings.html", categories=_categories(conn), rules=rules, st=st)
+    st = {k: get_setting(conn, k) for k in ("org_name", "fiscal_year_start_month", "receipt_required_over",
+                                            "report_recipients", "report_schedule_enabled", "report_send_hour")}
+    next_date, next_month = mailer.next_send(conn)
+    sends = conn.execute("SELECT * FROM report_sends ORDER BY id DESC LIMIT 12").fetchall()
+    return render_template("settings.html", categories=_categories(conn), rules=rules, st=st,
+                           mail_ok=mailer.configured(), next_date=next_date, next_month=next_month, sends=sends)
 
 
 # ---------------------------------------------------------------- import history

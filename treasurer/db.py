@@ -86,6 +86,20 @@ CREATE TABLE IF NOT EXISTS email_log (
     detail TEXT
 );
 
+CREATE TABLE IF NOT EXISTS report_sends (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    month TEXT NOT NULL,             -- report month YYYY-MM
+    scheduled INTEGER NOT NULL,      -- 1 = the automatic monthly send, 0 = sent by hand
+    status TEXT NOT NULL,            -- sending | sent | failed
+    attempts INTEGER NOT NULL DEFAULT 0,
+    recipients TEXT,
+    error TEXT,
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+-- One automatic send per report month
+CREATE UNIQUE INDEX IF NOT EXISTS idx_sends_sched ON report_sends(month) WHERE scheduled = 1;
+
 CREATE TABLE IF NOT EXISTS narratives (
     month TEXT PRIMARY KEY,
     text TEXT NOT NULL,
@@ -172,6 +186,9 @@ DEFAULT_SETTINGS = {
     "org_name": "VSU Wesley Foundation",
     "fiscal_year_start_month": "1",
     "receipt_required_over": "25",
+    "report_recipients": "revmattstout@gmail.com",
+    "report_schedule_enabled": "1",
+    "report_send_hour": "8",
 }
 
 

@@ -12,6 +12,8 @@ How the numbers fit together
   given an expense category (a refund) reduces that category.
 * Transfers between the ministry's own accounts are left out of both.
 """
+import csv
+import io
 from calendar import monthrange
 from collections import defaultdict
 from datetime import date
@@ -274,3 +276,31 @@ def report_for_ai(report):
     r["uncategorized_count"] = len(report["uncategorized"])
     r.pop("uncategorized", None)
     return r
+
+
+def report_csv_text(conn, month):
+    rep = build_report(conn, month)
+    buf = io.StringIO()
+    w = csv.writer(buf)
+    w.writerow([f"{get_setting(conn, 'org_name')} — Monthly Report", month])
+    w.writerow([])
+    w.writerow(["Section", "Line", "This month", "Prior month", "Fiscal YTD", "Monthly budget"])
+    for f in rep["giving"]["by_fund"]:
+        w.writerow(["Income: online giving", f["name"], f["amount"], f["prior"], f["ytd"], ""])
+    for l in rep["other_income"]:
+        w.writerow(["Income: other", l["name"], l["amount"], l["prior"], l["ytd"], l["budget"] or ""])
+    for l in rep["expenses"]:
+        w.writerow(["Expense", l["name"], l["amount"], l["prior"], l["ytd"], l["budget"] or ""])
+    s = rep["summary"]
+    w.writerow(["Total", "Income", s["income"], s["prior_income"], s["ytd_income"], ""])
+    w.writerow(["Total", "Expenses", s["expense"], s["prior_expense"], s["ytd_expense"], ""])
+    w.writerow(["Total", "Net", s["net"], s["prior_net"], s["ytd_net"], ""])
+    w.writerow([])
+    w.writerow(["Transactions"])
+    w.writerow(["Date", "Description", "Amount", "Category", "Receipt", "Notes"])
+    for t in conn.execute(
+            "SELECT t.*, r.id rid FROM transactions t LEFT JOIN receipts r ON r.transaction_id=t.id "
+            "WHERE substr(t.date,1,7)=? ORDER BY t.date, t.id", (month,)):
+        w.writerow([t["date"], t["description"], t["amount"], t["category"] or "Uncategorized",
+                    "yes" if t["rid"] else "", t["notes"] or ""])
+    return buf.getvalue()

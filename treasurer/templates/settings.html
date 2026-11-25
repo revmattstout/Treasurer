@@ -25,6 +25,35 @@
   </form>
 </div>
 
+<h2>Monthly report email</h2>
+<form class="panel" method="post">
+  {{ csrf() }}<input type="hidden" name="action" value="report_email">
+  <p style="margin-top:0">On the <b>third Wednesday</b> of each month, last month's report is emailed automatically.
+    {% if st.report_schedule_enabled == '1' and next_date %}Next: <b>{{ next_date.strftime('%A, %B') }} {{ next_date.day }}, {{ next_date.year }}</b> ({{ next_month|month_name }} report).{% endif %}</p>
+  {% if not mail_ok %}
+  <div class="callout">Sending isn't set up yet. Set <code>TREASURER_EMAIL_ADDRESS</code> and <code>TREASURER_EMAIL_APP_PASSWORD</code> (a Gmail app password) in <code>.env</code> and restart. See the README.</div>
+  {% endif %}
+  <div class="field"><label>Send to (separate addresses with commas)</label><input type="text" name="report_recipients" value="{{ st.report_recipients or '' }}" style="width:100%"></div>
+  <div class="row">
+    <label><input type="checkbox" name="enabled" {{ 'checked' if st.report_schedule_enabled == '1' }}> Send automatically</label>
+    <label class="small muted">at
+      <select name="report_send_hour">{% for h in range(5, 21) %}<option value="{{ h }}" {{ 'selected' if h|string == st.report_send_hour }}>{{ (h - 1) % 12 + 1 }}:00 {{ 'AM' if h < 12 else 'PM' }}</option>{% endfor %}</select>
+      Eastern</label>
+    <button>Save</button>
+  </div>
+  {% if sends %}
+  <div class="table-scroll" style="margin-top:12px">
+  <table class="small">
+    <thead><tr><th>When</th><th>Report</th><th>To</th><th>Result</th></tr></thead>
+    <tbody>{% for x in sends %}
+      <tr><td>{{ x.updated_at }}</td><td>{{ x.month|month_name }}{% if not x.scheduled %} <span class="chip">by hand</span>{% endif %}</td><td>{{ x.recipients }}</td>
+        <td><span class="chip {{ 'ok' if x.status == 'sent' else 'warn' }}">{{ x.status }}</span>{% if x.error %} <span class="muted">{{ x.error }}</span>{% endif %}</td></tr>
+    {% endfor %}</tbody>
+  </table>
+  </div>
+  {% endif %}
+</form>
+
 <h2>Categories &amp; monthly budgets</h2>
 <form class="panel table-scroll" method="post">
   {{ csrf() }}<input type="hidden" name="action" value="budgets">

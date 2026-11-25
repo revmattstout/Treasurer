@@ -15,6 +15,7 @@
     </form>
     <button class="secondary" onclick="window.print()">Print / save PDF</button>
     <a class="btn secondary" href="{{ url_for('main.report_csv', month=r.month) }}">Download CSV</a>
+    <form method="post" action="{{ url_for('main.report_email', month=r.month) }}" class="inline">{{ csrf() }}<button class="secondary">Email this report</button></form>
   </div>
 </div>
 
