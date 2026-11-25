@@ -30,7 +30,8 @@ class FakeIMAP:
         self.fail_login = fail_login
         self.seen = set()
 
-    def __call__(self, host):
+    def __call__(self, host, timeout=None):
+        assert timeout  # connections must never wait forever
         return self
 
     def login(self, user, pw):

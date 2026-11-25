@@ -42,6 +42,7 @@ from . import ai, services
 from .importers import ImportError_, decode
 
 LOOKBACK_DAYS = 45
+IMAP_TIMEOUT_SECONDS = 60
 MAX_ATTACHMENT_BYTES = 30 * 1024 * 1024
 _lock = threading.Lock()
 
@@ -280,13 +281,13 @@ def fetch_and_import(conn, receipts_dir, imap_factory=imaplib.IMAP4_SSL):
         raise MailboxError("Already checking email; try again in a moment.")
     try:
         try:
-            imap = imap_factory(c["host"])
+            imap = imap_factory(c["host"], timeout=IMAP_TIMEOUT_SECONDS)
             imap.login(c["address"], c["password"])
         except imaplib.IMAP4.error:
             raise MailboxError("Gmail rejected the login. Use a Gmail app password (Google Account → Security → "
                                "2-Step Verification → App passwords), not the regular account password.")
-        except OSError as e:
-            raise MailboxError(f"Couldn't connect to {c['host']}: {e}")
+        except OSError as e:  # includes timeouts
+            raise MailboxError(f"Couldn't connect to {c['host']}: {e or 'timed out'}")
         try:
             imap.select("INBOX")
             since = (date.today() - timedelta(days=LOOKBACK_DAYS)).strftime("%d-%b-%Y")

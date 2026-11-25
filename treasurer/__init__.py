@@ -93,7 +93,10 @@ def create_app(test_config=None):
 
     # Background email checking (TREASURER_EMAIL_POLL_MINUTES). Skipped in
     # tests, the CLI, and the parent process of Flask's debug reloader.
+    # On Render the jobs run in their own process (python -m treasurer.jobs,
+    # TREASURER_BACKGROUND_JOBS=separate) so they can never stall the website.
     if (app.config.get("EMAIL_POLLER", True) and not app.config.get("TESTING")
+            and os.environ.get("TREASURER_BACKGROUND_JOBS") != "separate"
             and (os.environ.get("FLASK_DEBUG") != "1" or os.environ.get("WERKZEUG_RUN_MAIN") == "true")):
         from .mailbox import start_poller
         from .mailer import configured as mailer_configured, start_scheduler

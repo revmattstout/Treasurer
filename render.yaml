@@ -10,9 +10,13 @@ services:
     plan: starter
     region: virginia
     buildCommand: pip install -r requirements.txt
-    # One worker: the email checker and report scheduler run inside it.
-    # Long timeout: Claude can take a minute to read a PDF statement.
-    startCommand: gunicorn run:app --workers 1 --threads 4 --timeout 300 --bind 0.0.0.0:$PORT
+    # The email checker and monthly report run in their own process
+    # (treasurer.jobs, restarted if it ever exits) so they can't stall the
+    # website. One web worker with 8 threads; Claude calls are capped at
+    # 4 minutes, so 300 s is a safe request limit.
+    startCommand: >-
+      (while true; do python -m treasurer.jobs; echo "jobs exited, restarting in 30s"; sleep 30; done) &
+      exec gunicorn run:app --workers 1 --threads 8 --timeout 300 --bind 0.0.0.0:$PORT
     healthCheckPath: /healthz
     disk:
       name: treasurer-data
@@ -23,6 +27,8 @@ services:
         value: 3.12.8
       - key: TREASURER_DATA_DIR
         value: /var/data
+      - key: TREASURER_BACKGROUND_JOBS
+        value: separate
       - key: SECRET_KEY
         generateValue: true
       - key: APP_PASSWORD

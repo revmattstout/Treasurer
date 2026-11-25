@@ -28,7 +28,8 @@ def client():
     global _client
     if _client is None:
         import anthropic
-        _client = anthropic.Anthropic()
+        # Bounded waits: a stuck call must never tie up the web server.
+        _client = anthropic.Anthropic(timeout=120.0, max_retries=1)
     return _client
 
 
@@ -36,10 +37,10 @@ class AIError(RuntimeError):
     pass
 
 
-def _parse(content, output_format, system, effort="medium", max_tokens=16000):
+def _parse(content, output_format, system, effort="medium", max_tokens=16000, timeout=120.0):
     import anthropic
     try:
-        resp = client().beta.messages.parse(
+        resp = client().with_options(timeout=timeout).beta.messages.parse(
             model=MODEL,
             max_tokens=max_tokens,
             system=system,
@@ -58,6 +59,8 @@ def _parse(content, output_format, system, effort="medium", max_tokens=16000):
         raise AIError(f"The request was rejected: {e.message}")
     except anthropic.APIStatusError as e:
         raise AIError(f"Anthropic API error ({e.status_code}). Try again later.")
+    except anthropic.APITimeoutError:
+        raise AIError("Claude took too long to respond. Try again, or enter the details by hand.")
     except anthropic.APIConnectionError:
         raise AIError("Couldn't reach the Anthropic API.")
     if resp.stop_reason == "refusal":
@@ -98,7 +101,7 @@ def read_receipt(data: bytes, mime: str, categories: List[str]) -> ReceiptInfo:
         _file_block(data, mime),
         {"type": "text", "text": "Extract this receipt. Choose category from: " + "; ".join(categories)},
     ]
-    info = _parse(content, ReceiptInfo, system, effort="low", max_tokens=4000)
+    info = _parse(content, ReceiptInfo, system, effort="low", max_tokens=4000, timeout=90.0)
     if info.category not in categories:
         info.category = None
     return info
@@ -128,7 +131,7 @@ def read_pdf_statement(data: bytes) -> Statement:
     )
     content = [_file_block(data, "application/pdf"),
                {"type": "text", "text": "List every transaction on this statement."}]
-    return _parse(content, Statement, system, effort="medium", max_tokens=32000)
+    return _parse(content, Statement, system, effort="medium", max_tokens=32000, timeout=240.0)
 
 
 # ---------------------------------------------------------------- categorization
