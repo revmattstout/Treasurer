@@ -16,10 +16,15 @@
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#f6f7f9;">
 <tr><td align="center" style="padding:8px 2px;">
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:680px;background:#ffffff;border:1px solid #e2e5ea;border-radius:10px;">
-  <tr><td style="background:#b3122e;color:#ffffff;padding:16px 20px;border-radius:10px 10px 0 0;">
-    <div style="font-size:13px;opacity:.9;">{{ org_name }}</div>
-    <div style="font-size:21px;font-weight:700;">Treasurer's Report: {{ month_label }}</div>
-    <div style="font-size:12px;opacity:.85;">{{ r.period.start }} to {{ r.period.end }} · fiscal year from {{ r.fiscal_year_start }} · cash basis</div>
+  <tr><td style="background:#b3122e;color:#ffffff;padding:14px 16px;border-radius:10px 10px 0 0;">
+    <table role="presentation" cellpadding="0" cellspacing="0"><tr>
+      {% if logo_src %}<td valign="middle" style="padding-right:12px;"><img src="{{ logo_src }}" width="60" height="60" alt="{{ org_name }} logo" style="display:block;width:60px;height:60px;border:0;"></td>{% endif %}
+      <td valign="middle" style="color:#ffffff;">
+        <div style="font-size:13px;opacity:.9;">{{ org_name }}</div>
+        <div style="font-size:21px;font-weight:700;">Treasurer's Report: {{ month_label }}</div>
+        <div style="font-size:12px;opacity:.85;">{{ r.period.start }} to {{ r.period.end }} · fiscal year from {{ r.fiscal_year_start }} · cash basis</div>
+      </td>
+    </tr></table>
   </td></tr>
 
   <tr><td style="padding:16px 10px 4px;">

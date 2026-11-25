@@ -71,8 +71,11 @@ form.inline { display: inline; margin: 0; }
 .receipt-card .thumb { width: 120px; height: 150px; object-fit: cover; border-radius: 6px; border: 1px solid var(--line); background: var(--chip); display: flex; align-items: center; justify-content: center; color: var(--muted); font-size: 12px; text-decoration: none; }
 .receipt-card .fields { display: grid; gap: 8px; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); }
 .narrative p { margin: 0 0 10px; }
+.report-title { display: flex; align-items: center; gap: 14px; }
+.report-logo { width: 72px; height: 72px; flex: none; }
 .report-head { display: flex; justify-content: space-between; align-items: flex-end; gap: 12px; flex-wrap: wrap; }
 @media (max-width: 640px) {
+  .report-logo { width: 52px; height: 52px; }
   .receipt-card { grid-template-columns: 1fr; }
   .receipt-card .thumb { width: 100%; height: 180px; }
   .hide-sm { display: none; }
@@ -84,4 +87,5 @@ form.inline { display: inline; margin: 0; }
   main.wrap { padding: 0; max-width: none; }
   a { color: inherit; text-decoration: none; }
   h2 { break-after: avoid; }
+  .report-logo { width: 0.9in; height: 0.9in; }
 }

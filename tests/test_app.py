@@ -70,6 +70,8 @@ def test_import_categorize_and_report(client, app):
     page = client.get("/reports/2026-09")
     assert page.status_code == 200
     assert b"Report: September 2026" in page.data
+    assert b'class="report-logo" src="/static/logo.png"' in page.data
+    assert client.get("/static/logo.png").status_code == 200
     csv_resp = client.get("/reports/2026-09.csv")
     assert b"Income: online giving,General Fund,450.0" in csv_resp.data and b"GUSTO PAYROLL" in csv_resp.data
 

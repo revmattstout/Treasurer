@@ -4,10 +4,13 @@
 {% block content %}
 {% set s = r.summary %}
 <div class="report-head">
-  <div>
-    <div class="muted">{{ org_name }}</div>
-    <h1 style="margin:0">Treasurer's Report: {{ r.month|month_name }}</h1>
-    <div class="small muted">{{ r.period.start }} to {{ r.period.end }} · fiscal year to date from {{ r.fiscal_year_start }}</div>
+  <div class="report-title">
+    <img class="report-logo" src="{{ url_for('static', filename='logo.png') }}" alt="{{ org_name }} logo">
+    <div>
+      <div class="muted">{{ org_name }}</div>
+      <h1 style="margin:0">Treasurer's Report: {{ r.month|month_name }}</h1>
+      <div class="small muted">{{ r.period.start }} to {{ r.period.end }} · fiscal year to date from {{ r.fiscal_year_start }}</div>
+    </div>
   </div>
   <div class="row no-print">
     <form method="get" class="inline" onsubmit="location.href='{{ url_for('main.reports') }}/'+this.m.value;return false">

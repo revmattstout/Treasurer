@@ -17,6 +17,7 @@ Sending happens:
   * on demand:                          python -m treasurer.mailer --month 2026-10 --now
     or the "Email this report" button on a report page.
 """
+import base64
 import os
 import smtplib
 import sqlite3
@@ -127,9 +128,20 @@ def build_message(app, conn, month, to):
 
     env = app.jinja_env
     month_label = env.filters["month_name"](month)
-    html = env.get_template("report_email.html").render(
-        r=rep, org_name=org, narrative=narrative, narrative_is_draft=narrative_is_draft,
-        has_data=has_data, month_label=month_label, app_url=os.environ.get("TREASURER_APP_URL", ""))
+    logo_path = os.path.join(app.static_folder, "logo.png")
+    logo = open(logo_path, "rb").read() if os.path.exists(logo_path) else None
+    logo_cid = make_msgid(domain="treasurer.local")
+
+    def render(logo_src):
+        return env.get_template("report_email.html").render(
+            r=rep, org_name=org, narrative=narrative, narrative_is_draft=narrative_is_draft,
+            has_data=has_data, month_label=month_label, logo_src=logo_src,
+            app_url=os.environ.get("TREASURER_APP_URL", ""))
+
+    # Email body references the logo as an inline (cid:) image, which Gmail
+    # shows; the attached HTML copy embeds it so it works when opened alone.
+    html = render(f"cid:{logo_cid[1:-1]}" if logo else None)
+    html_file = render("data:image/png;base64," + base64.b64encode(logo).decode() if logo else None)
 
     s = rep["summary"]
     money = env.filters["money"]
@@ -147,9 +159,12 @@ def build_message(app, conn, month, to):
     msg["Message-ID"] = make_msgid(domain="treasurer.local")
     msg.set_content(text)
     msg.add_alternative(html, subtype="html")
-    msg.add_attachment(report_csv_text(conn, month).encode("utf-8"), maintype="text", subtype="csv",
+    if logo:
+        msg.get_payload()[1].add_related(logo, maintype="image", subtype="png", cid=logo_cid,
+                                         filename="logo.png", disposition="inline")
+    msg.add_attachment(report_csv_text(conn, month), subtype="csv", charset="utf-8",
                        filename=f"wesley-report-{month}.csv")
-    msg.add_attachment(html.encode("utf-8"), maintype="text", subtype="html",
+    msg.add_attachment(html_file, subtype="html", charset="utf-8",
                        filename=f"wesley-report-{month}.html")
     return msg
 

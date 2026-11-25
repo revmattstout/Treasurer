@@ -94,8 +94,14 @@ def test_scheduled_send_once(app, client, smtp_env):
     parsed = email.message_from_bytes(msg.as_bytes(), policy=email.policy.default)
     html = parsed.get_body(preferencelist=("html",)).get_content()
     assert "Treasurer's Report: October 2026" in html and "$1,075.00" in html
+    # Logo travels as an inline image referenced from the HTML body
+    logo = next(p for p in parsed.walk() if p.get_content_type() == "image/png")
+    assert f'src="cid:{logo["Content-ID"].strip("<>")}"' in html
     names = [p.get_filename() for p in parsed.iter_attachments()]
     assert names == ["wesley-report-2026-10.csv", "wesley-report-2026-10.html"]
+    attached_html = [p for p in parsed.iter_attachments() if p.get_filename().endswith(".html")][0].get_content()
+    assert 'src="data:image/png;base64,' in attached_html
+    assert "2026-10-31 · fiscal year" in attached_html  # non-ASCII text survives
     row = conn.execute("SELECT status, scheduled FROM report_sends").fetchone()
     assert tuple(row) == ("sent", 1)
 
