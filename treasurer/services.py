@@ -41,8 +41,10 @@ def import_bank(conn, filename, data, account=None, source_note=None):
     conn.execute("UPDATE imports SET rows_added=?, rows_skipped=? WHERE id=?",
                  (added, len(records) - added, import_id))
     conn.commit()
+    from .checks import match_all as match_checks
     return {"added": added, "skipped": len(records) - added,
-            "categorized": apply_rules(conn), "matched": auto_match_all(conn)}
+            "categorized": apply_rules(conn), "matched": auto_match_all(conn),
+            "checks_matched": match_checks(conn)}
 
 
 def import_giving(conn, filename, data, platform=None, source_note=None):
@@ -66,22 +68,35 @@ def import_giving(conn, filename, data, platform=None, source_note=None):
     return {"added": added, "skipped": len(records) - added, "rent": rent}
 
 
+def add_receipt_or_check(conn, receipts_dir, filename, data, use_ai=True, purpose=None,
+                         received_date=None, source=None):
+    """Add a photo as a receipt, unless Claude sees it's a photo of checks."""
+    res = add_receipt(conn, receipts_dir, filename, data, use_ai, purpose)
+    if res.get("is_check"):
+        from .checks import add_batch
+        b = add_batch(conn, receipts_dir, filename, data, received_date, source, note=purpose)
+        return {**b, "is_check": True}
+    return res
+
+
 def add_receipt(conn, receipts_dir, filename, data, use_ai=True, purpose=None):
     """Store a receipt, read it with Claude if enabled, and try to match it.
 
     Raises ImportError_ for unsupported file types. Returns a dict with the
-    receipt id, whether Claude read it, any reading error, and whether it matched.
+    receipt id, whether Claude read it, any reading error, and whether it
+    matched; or {"is_check": True} (nothing stored) if it's a photo of checks.
     """
     mime = mime_for(filename)
     if not mime:
         raise ImportError_("unsupported file type (use JPG, PNG, PDF, WEBP or HEIC)")
-    stored = store_file(receipts_dir, filename, data)
     fields = {"date": None, "amount": None, "vendor": None, "category": None, "purpose": purpose}
     read, error = False, None
     if use_ai and ai.enabled() and mime != "image/heic":
         cats = [r["name"] for r in conn.execute("SELECT name FROM categories WHERE kind='expense' ORDER BY name")]
         try:
             info = ai.read_receipt(data, mime, cats)
+            if info.document_type == "check":
+                return {"is_check": True}
             fields.update(vendor=info.vendor, amount=abs(info.total) if info.total is not None else None,
                           category=info.category, purpose=purpose or info.purpose)
             try:
@@ -91,6 +106,7 @@ def add_receipt(conn, receipts_dir, filename, data, use_ai=True, purpose=None):
             read = True
         except ai.AIError as e:
             error = str(e)
+    stored = store_file(receipts_dir, filename, data)
     cur = conn.execute(
         "INSERT INTO receipts(original_name, stored_name, date, amount, vendor, category, purpose) "
         "VALUES (?,?,?,?,?,?,?)",

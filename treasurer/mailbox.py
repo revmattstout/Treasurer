@@ -36,7 +36,7 @@ import threading
 import time
 from dataclasses import dataclass, field
 from datetime import date, timedelta
-from email.utils import parseaddr
+from email.utils import parseaddr, parsedate_to_datetime
 
 from . import ai, services
 from .importers import ImportError_, decode
@@ -64,6 +64,7 @@ class Summary:
     receipts: int = 0
     statements: int = 0
     giving: int = 0
+    checks: int = 0
     rejected: int = 0
     errors: list = field(default_factory=list)
 
@@ -71,7 +72,8 @@ class Summary:
         if not self.emails:
             return "No new email."
         parts = [f"Checked {self.emails} new email(s)"]
-        for n, label in ((self.receipts, "receipt"), (self.statements, "bank statement"),
+        for n, label in ((self.receipts, "receipt"), (self.checks, "check photo"),
+                         (self.statements, "bank statement"),
                          (self.giving, "giving file")):
             if n:
                 parts.append(f"{n} {label}{'s' if n != 1 else ''}")
@@ -110,7 +112,7 @@ def _has(text, words):
 
 
 def classify(filename, subject, data):
-    """Return 'bank', 'giving', 'receipt' or None (ignore)."""
+    """Return 'bank', 'giving', 'receipt', 'check' or None (ignore)."""
     name = filename.lower()
     ext = os.path.splitext(name)[1]
     hint = f"{subject} {name}"
@@ -126,9 +128,12 @@ def classify(filename, subject, data):
         if any(_has(line, GIVING_COLUMNS) for line in header_lines):
             return "giving"
         return "bank"
-    if ext == ".pdf":
-        return "bank" if _has(hint, ("statement",)) else "receipt"
-    if ext in (".jpg", ".jpeg", ".png", ".heic", ".webp", ".gif"):
+    if ext in (".pdf", ".jpg", ".jpeg", ".png", ".heic", ".webp", ".gif"):
+        subj = (subject or "").lower()
+        if re.search(r"\b(checks?|cheques?|deposit(s|ed|ing)?)\b", subj) and "statement" not in subj:
+            return "check"
+        if ext == ".pdf" and _has(hint, ("statement",)):
+            return "bank"
         return "receipt"
     return None
 
@@ -163,6 +168,21 @@ def _purpose(msg, subject):
     bits = [b for b in (_clean_subject(subject), first) if b]
     text = " — ".join(dict.fromkeys(bits))  # drop duplicates, keep order
     return text[:200] or None
+
+
+def _received_date(msg):
+    try:
+        return parsedate_to_datetime(str(msg.get("Date"))).date().isoformat()
+    except (TypeError, ValueError):
+        return date.today().isoformat()
+
+
+def _check_desc(r):
+    desc = f"photo of checks, {r['checks']} check{'s' if r['checks'] != 1 else ''} read"
+    desc += ", matched to a bank deposit" if r["matched"] else ", deposit not found yet"
+    if r["error"]:
+        desc += f" ({r['error']})"
+    return desc
 
 
 def _attachments(msg):
@@ -235,6 +255,7 @@ def process_message(conn, receipts_dir, raw, allowed, require_auth, summary):
 
     results = []
     purpose = _purpose(msg, subject)
+    received = _received_date(msg)
     found = False
     for filename, data in _attachments(msg):
         found = True
@@ -252,8 +273,18 @@ def process_message(conn, receipts_dir, raw, allowed, require_auth, summary):
                 r = services.import_giving(conn, filename, data, platform, source_note=note)
                 summary.giving += 1
                 results.append(f"{filename}: giving export, {r['added']} new gifts")
+            elif kind == "check":
+                from .checks import add_batch
+                r = add_batch(conn, receipts_dir, filename, data, received, note, note=purpose)
+                summary.checks += 1
+                results.append(f"{filename}: {_check_desc(r)}")
             elif kind == "receipt":
-                r = services.add_receipt(conn, receipts_dir, filename, data, use_ai=True, purpose=purpose)
+                r = services.add_receipt_or_check(conn, receipts_dir, filename, data, use_ai=True,
+                                                  purpose=purpose, received_date=received, source=note)
+                if r.get("is_check"):
+                    summary.checks += 1
+                    results.append(f"{filename}: {_check_desc(r)}")
+                    continue
                 summary.receipts += 1
                 desc = "receipt" + (", matched" if r["matched"] else ", not matched yet")
                 if r["error"]:

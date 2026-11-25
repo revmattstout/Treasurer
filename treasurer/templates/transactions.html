@@ -26,6 +26,7 @@
   <tr>
     <td style="white-space:nowrap">{{ t.date }}</td>
     <td>{{ t.description }}{% if t.account %} <span class="chip">{{ t.account }}</span>{% endif %}
+      {% if t.check_count %} <a class="chip ok" href="{{ url_for('main.checks_page') }}">{{ t.check_count }} check{{ 's' if t.check_count != 1 }}</a>{% endif %}
       {% if t.notes %}<div class="small muted">{{ t.notes }}</div>{% endif %}</td>
     <td class="num {{ 'pos' if t.amount > 0 }}">{{ t.amount|money }}</td>
     <td>

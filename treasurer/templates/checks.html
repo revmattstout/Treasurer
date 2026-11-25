@@ -1,0 +1,103 @@
+{% extends "base.html" %}
+{% from "_macros.html" import csrf with context %}
+{% block title %}Checks{% endblock %}
+{% block content %}
+{% set back = request.full_path %}
+<h1>Deposited checks</h1>
+<p class="muted small">Photos of checks you deposit. Each check is matched to its bank deposit, so the report shows who gave.
+  Check the names and amounts Claude read, since handwriting can be misread.</p>
+<div class="row" style="margin-bottom:12px">
+  <a class="btn {{ '' if not flt else 'secondary' }}" href="{{ url_for('main.checks_page') }}">All</a>
+  <a class="btn {{ '' if flt == 'unmatched' else 'secondary' }}" href="{{ url_for('main.checks_page', filter='unmatched') }}">Not matched yet</a>
+  <a class="btn secondary" href="{{ url_for('main.upload') }}#checks">Upload check photos</a>
+</div>
+
+{% for b in batches %}
+{% set rows = items.get(b.id, []) %}
+{% set ns = namespace(total=0, matched=0) %}
+{% for c in rows %}{% set ns.total = ns.total + (c.amount or 0) %}{% if c.transaction_id %}{% set ns.matched = ns.matched + 1 %}{% endif %}{% endfor %}
+<div class="panel">
+  <div class="receipt-card">
+    <a class="thumb" href="{{ url_for('main.check_file', batch_id=b.id) }}" target="_blank">
+      {% if b.stored_name.endswith(('.jpg','.jpeg','.png','.gif','.webp')) %}
+        <img class="thumb" src="{{ url_for('main.check_file', batch_id=b.id) }}" alt="Photo of checks {{ b.original_name }}">
+      {% else %}{{ b.original_name.rsplit('.',1)[-1]|upper }} · open{% endif %}
+    </a>
+    <div>
+      <div class="row" style="justify-content:space-between">
+        <div><b>{{ rows|length }} check{{ 's' if rows|length != 1 }}, {{ ns.total|money }}</b>
+          <span class="small muted">· sent {{ b.received_date }}{% if b.source %} · {{ b.source }}{% endif %}</span>
+          {% if b.note %}<div class="small muted">{{ b.note }}</div>{% endif %}</div>
+        <div>
+          {% if rows and ns.matched == rows|length %}<span class="chip ok">✓ matched</span>
+          {% elif ns.matched %}<span class="chip warn">{{ ns.matched }} of {{ rows|length }} matched</span>
+          {% else %}<span class="chip warn">deposit not found yet</span>{% endif %}
+        </div>
+      </div>
+      {% if b.read_error %}<p class="small neg" style="margin:6px 0">{{ b.read_error }}</p>{% endif %}
+
+      <div class="table-scroll">
+      <table class="small" style="margin-top:6px">
+        <thead><tr><th>From</th><th class="num">Amount</th><th>Check #</th><th>Date</th><th>Memo</th><th>Counts as</th><th>Deposit</th><th></th></tr></thead>
+        <tbody>
+        {% for c in rows %}
+        {% set fid = 'chk-' ~ c.id %}
+        <tr>
+          <td><input form="{{ fid }}" type="text" name="payer" value="{{ c.payer or '' }}" style="width:150px" aria-label="From"></td>
+          <td class="num"><input form="{{ fid }}" type="text" name="amount" inputmode="decimal" value="{{ '%.2f'|format(c.amount) if c.amount is not none else '' }}" style="width:80px;text-align:right" aria-label="Amount"></td>
+          <td><input form="{{ fid }}" type="text" name="check_number" value="{{ c.check_number or '' }}" style="width:60px" aria-label="Check number"></td>
+          <td><input form="{{ fid }}" type="date" name="check_date" value="{{ c.check_date or '' }}" aria-label="Date on check"></td>
+          <td><input form="{{ fid }}" type="text" name="memo" value="{{ c.memo or '' }}" style="width:130px" aria-label="Memo"></td>
+          <td><select form="{{ fid }}" name="kind" aria-label="Counts as">
+            <option value="gift" {{ 'selected' if c.kind == 'gift' }}>Gift</option>
+            <option value="rent" {{ 'selected' if c.kind == 'rent' }}>Rent</option>
+            <option value="other" {{ 'selected' if c.kind == 'other' }}>Other</option></select></td>
+          <td style="white-space:nowrap">{% if c.transaction_id %}{{ c.tx_date }}<br>{{ c.tx_amount|money }}{% else %}<span class="muted">—</span>{% endif %}</td>
+          <td style="white-space:nowrap">
+            <form id="{{ fid }}" method="post" action="{{ url_for('main.update_check', check_id=c.id) }}" class="inline">
+              {{ csrf() }}<input type="hidden" name="back" value="{{ back }}">
+              <button class="secondary">Save</button>
+              <button class="link small" name="delete" value="1" style="color:var(--bad)" onclick="return confirm('Remove this check?')">remove</button>
+            </form></td>
+        </tr>
+        {% endfor %}
+        {% set fid = 'add-' ~ b.id %}
+        <tr>
+          <td><input form="{{ fid }}" type="text" name="payer" placeholder="Add a check: name" style="width:150px" aria-label="New check from"></td>
+          <td class="num"><input form="{{ fid }}" type="text" name="amount" inputmode="decimal" placeholder="0.00" style="width:80px;text-align:right" required aria-label="New check amount"></td>
+          <td><input form="{{ fid }}" type="text" name="check_number" style="width:60px" aria-label="New check number"></td>
+          <td></td>
+          <td><input form="{{ fid }}" type="text" name="memo" style="width:130px" aria-label="New check memo"></td>
+          <td><select form="{{ fid }}" name="kind" aria-label="New check counts as"><option value="gift">Gift</option><option value="rent">Rent</option><option value="other">Other</option></select></td>
+          <td></td>
+          <td><form id="{{ fid }}" method="post" action="{{ url_for('main.add_check_line', batch_id=b.id) }}" class="inline">
+            {{ csrf() }}<input type="hidden" name="back" value="{{ back }}"><button class="secondary">Add</button></form></td>
+        </tr>
+        </tbody>
+      </table>
+      </div>
+
+      <div class="row" style="margin-top:8px">
+      {% if b.id in cands %}
+        {% if cands[b.id] %}
+        <form method="post" action="{{ url_for('main.match_check_batch', batch_id=b.id) }}" class="row">
+          {{ csrf() }}<input type="hidden" name="back" value="{{ back }}">
+          <select name="transaction_id">{% for t in cands[b.id] %}<option value="{{ t.id }}">{{ t.date }} · {{ t.description[:40] }} · {{ t.amount|money }}</option>{% endfor %}</select>
+          <button class="secondary">Match all to this deposit</button>
+        </form>
+        {% else %}
+        <span class="small muted">No deposits near {{ b.received_date }} yet. It will match when that bank statement is uploaded.</span>
+        {% endif %}
+      {% elif rows %}
+        <form method="post" action="{{ url_for('main.match_check_batch', batch_id=b.id) }}" class="inline">{{ csrf() }}<input type="hidden" name="back" value="{{ back }}"><input type="hidden" name="transaction_id" value=""><button class="link small">unmatch</button></form>
+      {% endif %}
+        <form method="post" action="{{ url_for('main.delete_check_batch', batch_id=b.id) }}" class="inline" onsubmit="return confirm('Delete this photo and its checks?')">{{ csrf() }}<button class="link small" style="color:var(--bad)">delete photo</button></form>
+      </div>
+    </div>
+  </div>
+</div>
+{% else %}
+<div class="panel muted">No check photos yet. Email a photo of the checks you're depositing with “deposit” in the subject, or <a href="{{ url_for('main.upload') }}#checks">upload one</a>.</div>
+{% endfor %}
+<p class="small muted">Photos of checks show bank account numbers. They're stored only here, behind the app's password, and Claude is told not to copy those numbers. You can delete a photo once its checks are matched; the names and amounts stay.</p>
+{% endblock %}

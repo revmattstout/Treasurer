@@ -29,6 +29,26 @@ Residents of the student house pay rent through Planning Center, in the same exp
 - **Rent paid by check:** categorize the bank deposit as **Student Housing Rent** and it's included in the rent total.
 - **Other fund names:** if rent shows up under another fund name (e.g. "Housing Deposit"), add it under **Settings → Student housing rent**.
 
+### Deposited checks: who gave
+
+The bank statement only says "MOBILE DEPOSIT $350". Email a photo of the checks you're depositing with **deposit** or **checks** in the subject, or upload it under **Upload → Checks you deposited**.
+
+**What happens:**
+
+1. Claude reads each check in the photo: who it's from, the amount, check number, date and memo. It's told never to copy account or routing numbers.
+2. The checks are matched to the bank deposit. A photo of several checks is matched to one deposit equal to their total. Otherwise each check is matched to a deposit of its own amount.
+3. Matching runs again whenever a bank statement is imported, so the photo can come before or after the statement.
+4. A check whose memo says "rent", or whose writer already pays rent online, counts as **Student Housing Rent**. Other checks count as gifts.
+5. The monthly report gets a **Gifts by check** section listing donors. Residents who paid rent by check appear in the rent section.
+6. Deposits are split between gifts and rent according to their checks, so the totals are right even when a deposit mixes both.
+
+**Fixing mistakes:** handwriting can be misread. The **Checks** page shows each photo next to what was read. You can fix names and amounts, add a check that was missed, mark a check as gift, rent or other, and match a photo to a deposit by hand.
+
+**Privacy:**
+
+- Donor names appear in the app and in the CSV attachment. The email body only shows totals.
+- Check photos show bank account numbers. They're stored behind the app's password. You can delete a photo once its checks are matched, and the names and amounts are kept.
+
 ### How online giving is counted
 
 Gifts are counted **once**, from the giving records, at their gross amount by fund. When the platform later deposits the lump-sum payout in the bank, that deposit is categorized **Online Giving Payout** and isn't counted as income again. Platform fees appear under **Bank & Processing Fees**. The report also compares net gifts to payouts deposited, so a missing payout stands out.

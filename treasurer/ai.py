@@ -84,6 +84,8 @@ def _file_block(data: bytes, mime: str):
 # ---------------------------------------------------------------- receipts
 
 class ReceiptInfo(BaseModel):
+    document_type: str = Field(description="'receipt' for a purchase receipt or invoice, 'check' if this is a "
+                                           "photo of one or more paper checks or a deposit slip, else 'other'")
     vendor: Optional[str] = Field(description="Store or payee name as printed")
     date: Optional[str] = Field(description="Purchase date as YYYY-MM-DD")
     total: Optional[float] = Field(description="Grand total paid, positive number, including tax and tip")
@@ -105,6 +107,37 @@ def read_receipt(data: bytes, mime: str, categories: List[str]) -> ReceiptInfo:
     if info.category not in categories:
         info.category = None
     return info
+
+
+# ---------------------------------------------------------------- checks
+
+class CheckItem(BaseModel):
+    payer: Optional[str] = Field(description="Name of the person or organization who wrote the check "
+                                             "(printed name/address block at top left, or the signature)")
+    amount: Optional[float] = Field(description="Check amount as a positive number (use the written-out amount if the numbers are unclear)")
+    date: Optional[str] = Field(description="Date written on the check, YYYY-MM-DD")
+    check_number: Optional[str] = Field(description="Check number printed at the top right")
+    memo: Optional[str] = Field(description="Text on the memo line, if any")
+
+
+class CheckPhoto(BaseModel):
+    checks: List[CheckItem] = Field(description="Every check visible in the image, one entry each. "
+                                                "Do not list a deposit slip as a check.")
+
+
+def read_checks(data: bytes, mime: str) -> CheckPhoto:
+    system = (
+        "You read photos of paper checks being deposited by the treasurer of a small campus ministry. "
+        "A photo may show one check or several, or be a PDF scan. Extract each check exactly as written. "
+        "Never transcribe bank account numbers or routing numbers (the numbers along the bottom edge). "
+        "If a field is not legible, return null rather than guessing."
+    )
+    content = [_file_block(data, mime), {"type": "text", "text": "List every check in this image."}]
+    result = _parse(content, CheckPhoto, system, effort="medium", max_tokens=8000, timeout=120.0)
+    for c in result.checks:
+        if c.amount is not None:
+            c.amount = abs(c.amount)
+    return result
 
 
 # ---------------------------------------------------------------- PDF statements

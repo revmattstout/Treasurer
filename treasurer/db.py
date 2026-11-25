@@ -59,6 +59,32 @@ CREATE TABLE IF NOT EXISTS donations (
 );
 CREATE INDEX IF NOT EXISTS idx_don_date ON donations(date);
 
+-- Photos of checks being deposited. One batch = one photo/upload, which
+-- usually becomes one bank deposit; each check in it is a separate row.
+CREATE TABLE IF NOT EXISTS check_batches (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    original_name TEXT NOT NULL,
+    stored_name TEXT NOT NULL,
+    received_date TEXT NOT NULL,     -- when the photo was emailed/uploaded (≈ deposit date)
+    source TEXT,                     -- e.g. "emailed by x@y.com" or "uploaded"
+    note TEXT,
+    read_error TEXT,
+    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS checks (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    batch_id INTEGER NOT NULL REFERENCES check_batches(id) ON DELETE CASCADE,
+    payer TEXT,                      -- who wrote the check
+    amount REAL,
+    check_date TEXT,                 -- date written on the check
+    check_number TEXT,
+    memo TEXT,
+    kind TEXT NOT NULL DEFAULT 'gift',   -- gift | rent | other
+    transaction_id INTEGER REFERENCES transactions(id) ON DELETE SET NULL
+);
+CREATE INDEX IF NOT EXISTS idx_checks_tx ON checks(transaction_id);
+
 CREATE TABLE IF NOT EXISTS receipts (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     original_name TEXT NOT NULL,

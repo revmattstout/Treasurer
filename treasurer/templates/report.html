@@ -129,14 +129,40 @@
   {% if r.rent.by_payer %}
   <div class="table-scroll">
   <table>
-    <thead><tr><th>Resident</th><th class="num">Payments</th><th>Last paid</th><th class="num">Amount</th></tr></thead>
-    <tbody>{% for p in r.rent.by_payer %}<tr><td>{{ p.name }}</td><td class="num">{{ p.payments }}</td><td>{{ p.last_paid }}</td><td class="num">{{ p.amount|money }}</td></tr>{% endfor %}</tbody>
+    <thead><tr><th>Resident</th><th class="num">Payments</th><th>Paid by</th><th>Last paid</th><th class="num">Amount</th></tr></thead>
+    <tbody>{% for p in r.rent.by_payer %}<tr><td>{{ p.name }}</td><td class="num">{{ p.payments }}</td><td>{{ p.how.replace(',', ', ') }}</td><td>{{ p.last_paid }}</td><td class="num">{{ p.amount|money }}</td></tr>{% endfor %}</tbody>
   </table>
   </div>
   {% else %}
   <p class="small muted" style="margin:0">No online rent payments this month.</p>
   {% endif %}
-  <p class="small muted" style="margin-bottom:0">Online payments whose fund is “{{ rent_funds }}” count as rent, not gifts (change this in Settings). Rent paid by check counts too if you categorize the deposit as <b>Student Housing Rent</b>.</p>
+  <p class="small muted" style="margin-bottom:0">Online payments whose fund is “{{ rent_funds }}” count as rent, not gifts (change this in Settings). Rent checks count when you send a photo of them (or categorize the deposit as <b>Student Housing Rent</b>).</p>
+</div>
+
+<h2 id="checks">Gifts by check</h2>
+<div class="panel">
+  {% set ck = r.checks %}
+  <p style="margin-top:0">{% if ck.gift_count %}<b>{{ ck.gift_total|money }}</b> in {{ ck.gift_count }} check gift{{ 's' if ck.gift_count != 1 }} from {{ ck.donor_count }} donor{{ 's' if ck.donor_count != 1 }}, matched to bank deposits this month.{% else %}No check gifts matched to deposits this month.{% endif %}
+  {% if ck.unmatched_count %}<span class="neg">{{ ck.unmatched_count }} photographed check{{ 's' if ck.unmatched_count != 1 }} {{ 'haven’t' if ck.unmatched_count != 1 else 'hasn’t' }} been matched to a deposit yet</span> <a class="no-print" href="{{ url_for('main.checks_page', filter='unmatched') }}">(review)</a>.{% endif %}</p>
+  {% if ck.by_donor %}
+  <div class="table-scroll">
+  <table>
+    <thead><tr><th>Donor</th><th class="num">Checks</th><th class="num">Amount</th></tr></thead>
+    <tbody>{% for d in ck.by_donor %}<tr><td>{{ d.name }}</td><td class="num">{{ d.checks }}</td><td class="num">{{ d.amount|money }}</td></tr>{% endfor %}</tbody>
+  </table>
+  </div>
+  {% endif %}
+  {% if ck.deposited %}
+  <details style="margin-top:8px"><summary class="small">Every check deposited this month</summary>
+  <div class="table-scroll">
+  <table class="small">
+    <thead><tr><th>Deposited</th><th>From</th><th>Check #</th><th>Memo</th><th>Counts as</th><th class="num">Amount</th></tr></thead>
+    <tbody>{% for c in ck.deposited %}<tr><td>{{ c.deposit_date }}</td><td>{{ c.payer or 'Unknown' }}</td><td>{{ c.check_number or '' }}</td><td>{{ c.memo or '' }}</td><td>{{ c.kind }}</td><td class="num">{{ c.amount|money }}</td></tr>{% endfor %}</tbody>
+  </table>
+  </div>
+  </details>
+  {% endif %}
+  <p class="small muted" style="margin-bottom:0">From photos of deposited checks. These gifts are included in “Donations - Cash &amp; Check” above, and rent checks in “Student Housing Rent”.</p>
 </div>
 
 <h2 id="receipts">Receipts</h2>

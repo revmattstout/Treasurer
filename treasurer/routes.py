@@ -132,6 +132,8 @@ def upload_bank():
         msg += f"; {res['categorized']} auto-categorized"
         if res["matched"]:
             msg += f"; {res['matched']} receipts matched"
+        if res.get("checks_matched"):
+            msg += f"; {res['checks_matched']} checks matched to deposits"
         flash(msg + ".", "success")
     return redirect(url_for("main.transactions", filter="uncategorized"))
 
@@ -168,9 +170,13 @@ def upload_receipts():
     added = read = matched = 0
     for f in files:
         try:
-            res = services.add_receipt(conn, current_app.config["RECEIPTS_DIR"], f.filename, f.read(), use_ai)
+            res = services.add_receipt_or_check(conn, current_app.config["RECEIPTS_DIR"], f.filename, f.read(),
+                                                use_ai, source="uploaded")
         except ImportError_ as e:
             flash(f"{f.filename}: {e}", "error")
+            continue
+        if res.get("is_check"):
+            flash(f"{f.filename} looks like a photo of checks, so it was added under Checks instead.", "success")
             continue
         added += 1
         read += res["read"]
@@ -184,6 +190,143 @@ def upload_receipts():
         msg += f"; {matched} matched to bank transactions."
         flash(msg, "success")
     return redirect(url_for("main.receipts", filter="unmatched"))
+
+
+@bp.route("/upload/checks", methods=["POST"])
+def upload_checks():
+    from .checks import add_batch
+    conn = get_db()
+    files = [f for f in request.files.getlist("files") if f.filename]
+    if not files:
+        flash("Choose at least one file.", "error")
+        return redirect(url_for("main.upload"))
+    try:
+        deposited = parse_date(request.form["deposited"]) if request.form.get("deposited") else None
+    except ValueError:
+        deposited = None
+    for f in files:
+        try:
+            r = add_batch(conn, current_app.config["RECEIPTS_DIR"], f.filename, f.read(), deposited, "uploaded")
+        except ValueError as e:
+            flash(f"{f.filename}: {e}", "error")
+            continue
+        msg = f"{f.filename}: read {r['checks']} check(s)"
+        msg += "; matched to a bank deposit." if r["matched"] else "; the deposit isn't on a bank statement yet."
+        flash(msg, "success")
+        if r["error"]:
+            flash(f"{f.filename}: {r['error']}", "error")
+    return redirect(url_for("main.checks_page"))
+
+
+@bp.route("/checks")
+def checks_page():
+    from .checks import deposit_candidates
+    conn = get_db()
+    flt = request.args.get("filter") or ""
+    sql = "SELECT * FROM check_batches"
+    if flt == "unmatched":
+        sql += (" WHERE id IN (SELECT batch_id FROM checks WHERE transaction_id IS NULL) "
+                "OR id NOT IN (SELECT batch_id FROM checks)")
+    batches = conn.execute(sql + " ORDER BY received_date DESC, id DESC LIMIT 200").fetchall()
+    items = {}
+    for c in conn.execute(
+            "SELECT c.*, t.date AS tx_date, t.description AS tx_description, t.amount AS tx_amount "
+            "FROM checks c LEFT JOIN transactions t ON t.id = c.transaction_id ORDER BY c.id"):
+        items.setdefault(c["batch_id"], []).append(c)
+    cands = {b["id"]: deposit_candidates(conn, b["id"]) for b in batches
+             if any(c["transaction_id"] is None for c in items.get(b["id"], []))}
+    return render_template("checks.html", batches=batches, items=items, cands=cands, flt=flt)
+
+
+@bp.route("/checks/<int:check_id>", methods=["POST"])
+def update_check(check_id):
+    from .checks import match_batch
+    conn = get_db()
+    f = request.form
+    row = conn.execute("SELECT batch_id FROM checks WHERE id=?", (check_id,)).fetchone()
+    if not row:
+        abort(404)
+    if f.get("delete"):
+        conn.execute("DELETE FROM checks WHERE id=?", (check_id,))
+        conn.commit()
+        flash("Check removed.", "success")
+        return redirect(_back() or url_for("main.checks_page"))
+    try:
+        amt = parse_amount(f.get("amount"))
+        d = parse_date(f["check_date"]) if f.get("check_date") else None
+    except ValueError as e:
+        flash(str(e), "error")
+        return redirect(_back() or url_for("main.checks_page"))
+    kind = f.get("kind") if f.get("kind") in ("gift", "rent", "other") else "gift"
+    conn.execute("UPDATE checks SET payer=?, amount=?, check_date=?, check_number=?, memo=?, kind=? WHERE id=?",
+                 (f.get("payer") or None, abs(amt) if amt is not None else None, d,
+                  f.get("check_number") or None, f.get("memo") or None, kind, check_id))
+    conn.commit()
+    match_batch(conn, row["batch_id"])
+    flash("Check saved.", "success")
+    return redirect(_back() or url_for("main.checks_page"))
+
+
+@bp.route("/checks/batch/<int:batch_id>/add", methods=["POST"])
+def add_check_line(batch_id):
+    from .checks import match_batch
+    conn = get_db()
+    f = request.form
+    try:
+        amt = parse_amount(f.get("amount"))
+    except ValueError as e:
+        flash(str(e), "error")
+        return redirect(_back() or url_for("main.checks_page"))
+    kind = f.get("kind") if f.get("kind") in ("gift", "rent", "other") else "gift"
+    conn.execute("INSERT INTO checks(batch_id, payer, amount, check_number, memo, kind) VALUES (?,?,?,?,?,?)",
+                 (batch_id, f.get("payer") or None, abs(amt) if amt is not None else None,
+                  f.get("check_number") or None, f.get("memo") or None, kind))
+    conn.commit()
+    match_batch(conn, batch_id)
+    flash("Check added.", "success")
+    return redirect(_back() or url_for("main.checks_page"))
+
+
+@bp.route("/checks/batch/<int:batch_id>/match", methods=["POST"])
+def match_check_batch(batch_id):
+    conn = get_db()
+    tx_id = request.form.get("transaction_id", type=int)
+    if tx_id:
+        from .checks import _link
+        tx = conn.execute("SELECT * FROM transactions WHERE id=?", (tx_id,)).fetchone()
+        ids = [r[0] for r in conn.execute("SELECT id FROM checks WHERE batch_id=?", (batch_id,))]
+        if tx and ids:
+            _link(conn, ids, tx)
+            flash("Matched to the deposit.", "success")
+    else:
+        conn.execute("UPDATE checks SET transaction_id=NULL WHERE batch_id=?", (batch_id,))
+        flash("Unmatched.", "success")
+    conn.commit()
+    return redirect(_back() or url_for("main.checks_page"))
+
+
+@bp.route("/checks/batch/<int:batch_id>/file")
+def check_file(batch_id):
+    r = get_db().execute("SELECT stored_name FROM check_batches WHERE id=?", (batch_id,)).fetchone()
+    if not r:
+        abort(404)
+    return send_from_directory(current_app.config["RECEIPTS_DIR"], r["stored_name"])
+
+
+@bp.route("/checks/batch/<int:batch_id>/delete", methods=["POST"])
+def delete_check_batch(batch_id):
+    conn = get_db()
+    r = conn.execute("SELECT stored_name FROM check_batches WHERE id=?", (batch_id,)).fetchone()
+    if r:
+        try:
+            os.remove(os.path.join(current_app.config["RECEIPTS_DIR"], r["stored_name"]))
+        except FileNotFoundError:
+            pass
+        conn.execute("DELETE FROM checks WHERE batch_id=?", (batch_id,))
+        conn.execute("DELETE FROM check_batches WHERE id=?", (batch_id,))
+        conn.commit()
+        flash("Check photo deleted.", "success")
+    return redirect(url_for("main.checks_page"))
 
 
 @bp.route("/upload/check-email", methods=["POST"])
@@ -209,7 +352,8 @@ def transactions():
     month = request.args.get("month") or ""
     flt = request.args.get("filter") or ""
     q = request.args.get("q", "").strip()
-    sql = ("SELECT t.*, r.id AS receipt_id FROM transactions t "
+    sql = ("SELECT t.*, r.id AS receipt_id, "
+           "(SELECT COUNT(*) FROM checks c WHERE c.transaction_id = t.id) AS check_count FROM transactions t "
            "LEFT JOIN receipts r ON r.transaction_id = t.id WHERE 1=1")
     params = []
     if MONTH_RE.match(month):

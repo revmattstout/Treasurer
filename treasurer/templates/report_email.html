@@ -101,6 +101,7 @@
       <tr><td style="{{ cell }}padding-left:20px;color:#5d6676;">{{ a.name }}</td><td style="{{ num }}color:#5d6676;">{{ a.ending|money }}</td></tr>
       {% endfor %}
       <tr><td style="{{ cell }}">Online gifts ({{ r.giving.gifts }} from {{ r.giving.donors }} donors)</td><td style="{{ num }}">{{ r.giving.total|money }}</td></tr>
+      <tr><td style="{{ cell }}">Check gifts matched to deposits ({{ r.checks.gift_count }} from {{ r.checks.donor_count }} donor{{ 's' if r.checks.donor_count != 1 }})</td><td style="{{ num }}">{{ r.checks.gift_total|money }}</td></tr>
       <tr><td style="{{ cell }}">Student housing rent ({{ r.rent.payers }} resident{{ 's' if r.rent.payers != 1 }} paid online)</td><td style="{{ num }}">{{ r.rent.total|money }}</td></tr>
       <tr><td style="{{ cell }}">Online payment fees (gifts and rent)</td><td style="{{ num }}">({{ r.giving.fees|money }})</td></tr>
       <tr><td style="{{ cell }}">Payouts deposited in bank</td><td style="{{ num }}">{{ r.giving.payouts_deposited|money }}</td></tr>
@@ -121,7 +122,7 @@
   </td></tr>
 
   <tr><td style="padding:12px 10px 18px;font-size:12px;color:#5d6676;">
-    The transaction detail is attached as a spreadsheet (CSV).
+    The transaction detail, including who each deposited check was from, is attached as a spreadsheet (CSV).
     {% if app_url %}<a href="{{ app_url.rstrip('/') }}/reports/{{ r.month }}" style="color:#1f4e79;">Open this report in the treasurer app</a>.{% endif %}
     This email is sent automatically on the third Wednesday of each month.
   </td></tr>

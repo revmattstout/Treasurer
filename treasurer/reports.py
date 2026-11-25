@@ -19,6 +19,7 @@ from collections import defaultdict
 from datetime import date
 
 from .categorize import rule_pattern_from_description
+from .checks import GIFT_CATEGORY, SPLITTABLE, allocation as check_allocation
 from .db import RENT_CATEGORY, get_setting
 
 UNCAT_IN = "Uncategorized deposits"
@@ -71,10 +72,24 @@ def period_totals(conn, start, end):
     expense = defaultdict(float)
     payouts = transfers = 0.0
 
+    alloc = check_allocation(conn, start, end)
     for r in conn.execute(
-        "SELECT category, amount FROM transactions WHERE date BETWEEN ? AND ?", (start, end)
+        "SELECT id, category, amount FROM transactions WHERE date BETWEEN ? AND ?", (start, end)
     ):
         cat, amt = r["category"], r["amount"]
+        if r["id"] in alloc and cat in SPLITTABLE and amt > 0:
+            # A deposit we have check photos for: count each check as a gift
+            # or rent; anything not covered by a photographed check (or checks
+            # marked "other") stays with the deposit's own category.
+            a = alloc[r["id"]]
+            covered = a["gift"] + a["rent"] + a["other"]
+            scale = min(1.0, amt / covered) if covered else 1.0
+            income[GIFT_CATEGORY] += a["gift"] * scale
+            income[RENT_CATEGORY] += a["rent"] * scale
+            rest = amt - (a["gift"] + a["rent"]) * scale
+            if rest > 0.004:
+                income[cat or UNCAT_IN] += rest
+            continue
         kind = kinds.get(cat)
         if kind == "payout":
             payouts += amt
@@ -265,16 +280,24 @@ def build_report(conn, month):
         "rent": {
             "online_total": cur["rent_online_total"],
             "payments": cur["rent_payment_count"],
-            "payers": cur["rent_payer_count"],
+            "payers": cur["rent_payer_count"],  # online only; see by_payer for checks too
             # Includes any rent checks deposited at the bank and categorized as rent
             "total": round(cur["other_income"].get(RENT_CATEGORY, 0.0), 2),
             "prior": round(prv["other_income"].get(RENT_CATEGORY, 0.0), 2),
             "ytd": round(ytd["other_income"].get(RENT_CATEGORY, 0.0), 2),
             "by_payer": [dict(r) for r in conn.execute(
-                "SELECT donor AS name, COUNT(*) AS payments, SUM(gross) AS amount, MAX(date) AS last_paid "
-                "FROM donations WHERE kind='rent' AND date BETWEEN ? AND ? GROUP BY donor ORDER BY donor",
-                (start, end))],
+                "SELECT name, COUNT(*) AS payments, SUM(amount) AS amount, MAX(paid) AS last_paid, "
+                "GROUP_CONCAT(DISTINCT how) AS how FROM ("
+                "  SELECT donor AS name, gross AS amount, date AS paid, 'online' AS how FROM donations "
+                "  WHERE kind='rent' AND date BETWEEN ? AND ? "
+                "  UNION ALL "
+                "  SELECT COALESCE(c.payer, 'Unknown'), c.amount, t.date, 'check' FROM checks c "
+                "  JOIN transactions t ON t.id = c.transaction_id "
+                "  WHERE c.kind='rent' AND c.amount IS NOT NULL AND t.date BETWEEN ? AND ?"
+                ") GROUP BY name ORDER BY name",
+                (start, end, start, end))],
         },
+        "checks": check_section(conn, start, end),
         "other_income": lines("other_income"),
         "expenses": lines("expenses"),
         "bank": bank_summary(conn, start, end),
@@ -301,6 +324,8 @@ def report_for_ai(report):
         for m in report["receipts"]["missing"][:25]
     ]
     r["rent"] = {k: v for k, v in report["rent"].items() if k != "by_payer"}  # no resident names
+    c = report["checks"]
+    r["checks"] = {k: c[k] for k in ("gift_total", "gift_count", "donor_count", "rent_total", "unmatched_count")}
     r["uncategorized_count"] = len(report["uncategorized"])
     r.pop("uncategorized", None)
     return r
@@ -331,4 +356,48 @@ def report_csv_text(conn, month):
             "WHERE substr(t.date,1,7)=? ORDER BY t.date, t.id", (month,)):
         w.writerow([t["date"], t["description"], t["amount"], t["category"] or "Uncategorized",
                     "yes" if t["rid"] else "", t["notes"] or ""])
+    ck = rep["checks"]
+    if ck["deposited"] or ck["unmatched"]:
+        w.writerow([])
+        w.writerow(["Deposited checks"])
+        w.writerow(["Deposit date", "From", "Check #", "Memo", "Counts as", "Amount", "Bank deposit"])
+        for c in ck["deposited"]:
+            w.writerow([c["deposit_date"], c["payer"] or "Unknown", c["check_number"] or "", c["memo"] or "",
+                        c["kind"], c["amount"], f'{c["deposit_description"]} {c["deposit_amount"]}'])
+        for c in ck["unmatched"]:
+            w.writerow([c["received_date"], c["payer"] or "Unknown", c["check_number"] or "", c["memo"] or "",
+                        c["kind"], c["amount"], "not matched yet"])
     return buf.getvalue()
+
+
+def check_section(conn, start, end):
+    """Checks deposited in the period (by bank deposit date), plus photos
+    sent in the period whose deposit hasn't been found yet."""
+    rows = [dict(r) for r in conn.execute(
+        "SELECT c.id, c.batch_id, c.payer, c.amount, c.check_number, c.memo, c.kind, c.check_date, "
+        "t.date AS deposit_date, t.description AS deposit_description, t.amount AS deposit_amount "
+        "FROM checks c JOIN transactions t ON t.id = c.transaction_id "
+        "WHERE t.date BETWEEN ? AND ? ORDER BY t.date, c.id", (start, end))]
+    unmatched = [dict(r) for r in conn.execute(
+        "SELECT c.id, c.batch_id, c.payer, c.amount, c.check_number, c.memo, c.kind, c.check_date, "
+        "b.received_date FROM checks c JOIN check_batches b ON b.id = c.batch_id "
+        "WHERE c.transaction_id IS NULL AND b.received_date BETWEEN ? AND ? ORDER BY b.received_date, c.id",
+        (start, end))]
+    gifts = [r for r in rows if r["kind"] == "gift" and r["amount"] is not None]
+    by_donor = {}
+    for g in gifts:
+        name = g["payer"] or "Unknown"
+        d = by_donor.setdefault(name, {"name": name, "amount": 0.0, "checks": 0})
+        d["amount"] += g["amount"]
+        d["checks"] += 1
+    return {
+        "deposited": rows,
+        "unmatched": unmatched,
+        "unmatched_count": len(unmatched),
+        "gift_total": round(sum(g["amount"] for g in gifts), 2),
+        "gift_count": len(gifts),
+        "donor_count": len({g["payer"] for g in gifts if g["payer"]}),
+        "by_donor": sorted(({**d, "amount": round(d["amount"], 2)} for d in by_donor.values()),
+                           key=lambda d: (-d["amount"], d["name"])),
+        "rent_total": round(sum(r["amount"] for r in rows if r["kind"] == "rent" and r["amount"]), 2),
+    }

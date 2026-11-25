@@ -29,6 +29,15 @@
     <button>Import gifts</button>
   </form>
 
+  <form class="panel" id="checks" method="post" action="{{ url_for('main.upload_checks') }}" enctype="multipart/form-data">
+    {{ csrf() }}
+    <h2 style="margin-top:0">Checks you deposited</h2>
+    <p class="small muted">A photo of the checks (one or several per photo). {% if ai_enabled %}Claude reads who each is from, and{% else %}You enter who each is from (Claude isn't on), and{% endif %} they're matched to the deposit on your bank statement.</p>
+    <div class="field"><label>Photos</label><input type="file" name="files" multiple accept="image/*,.pdf,.heic" required></div>
+    <div class="field"><label>Date deposited (optional; defaults to today)</label><input type="date" name="deposited"></div>
+    <button>Upload checks</button>
+  </form>
+
   <form class="panel" method="post" action="{{ url_for('main.upload_receipts') }}" enctype="multipart/form-data">
     {{ csrf() }}
     <h2 style="margin-top:0">Receipts</h2>
@@ -55,6 +64,7 @@
     <form method="post" action="{{ url_for('main.check_email') }}">{{ csrf() }}<button>Check email now</button></form>
   </div>
   <ul class="small muted">
+    <li>Photos of <b>checks you're depositing</b>: put “deposit” or “checks” in the subject. Who each check is from is recorded and matched to the bank deposit.</li>
     <li>Photos and PDFs become <b>receipts</b>. Put what the purchase was for in the subject or message (e.g. “Pizza for Tuesday worship”).</li>
     <li>Put the word <b>statement</b> in the subject for PDF bank statements; CSV/OFX files are recognized automatically. Add “savings” or “checking” to the subject to label the account.</li>
     <li>Put the word <b>giving</b> (or the platform name) in the subject for giving exports.</li>
