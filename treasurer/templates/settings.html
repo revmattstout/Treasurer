@@ -25,6 +25,17 @@
   </form>
 </div>
 
+<h2>Student housing rent</h2>
+<form class="panel" method="post">
+  {{ csrf() }}<input type="hidden" name="action" value="rent_funds">
+  <p style="margin-top:0" class="small">Residents pay rent through Planning Center alongside online gifts. Payments whose <b>fund</b> contains one of these words count as <b>Student Housing Rent</b> income, not giving.</p>
+  <div class="row">
+    <input type="text" name="rent_funds" value="{{ st.rent_funds or '' }}" placeholder="Rent" style="flex:1;min-width:200px">
+    <button>Save</button>
+  </div>
+  <p class="small muted" style="margin-bottom:0">Separate words with commas (e.g. <code>Rent, Housing Deposit</code>). Already-imported payments are re-sorted when you save.</p>
+</form>
+
 <h2>Monthly report email</h2>
 <form class="panel" method="post">
   {{ csrf() }}<input type="hidden" name="action" value="report_email">

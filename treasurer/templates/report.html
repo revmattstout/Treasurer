@@ -102,20 +102,41 @@
     <p class="small muted">{{ r.bank.transaction_count }} bank transactions.{% if r.transfers_net %} Includes {{ r.transfers_net|money }} net transfers between accounts (not income or expense).{% endif %}</p>
   </div>
   <div class="panel">
-    <h3 style="margin-top:0">Online giving</h3>
+    <h3 style="margin-top:0">Online giving &amp; rent payments</h3>
     <table>
       <tr><td>Gifts received</td><td class="num">{{ r.giving.gifts }}</td></tr>
       <tr><td>Named donors</td><td class="num">{{ r.giving.donors }}</td></tr>
       <tr><td>Average gift</td><td class="num">{{ r.giving.average_gift|money }}</td></tr>
       <tr><td>Gross given</td><td class="num">{{ r.giving.total|money }}</td></tr>
-      <tr><td>Processing fees</td><td class="num">({{ r.giving.fees|money }})</td></tr>
+      <tr><td>Rent paid online</td><td class="num">{{ r.rent.online_total|money }}</td></tr>
+      <tr><td>Processing fees (gifts and rent)</td><td class="num">({{ r.giving.fees|money }})</td></tr>
       <tr><td>Net of fees</td><td class="num">{{ r.giving.net|money }}</td></tr>
       <tr><td>Payouts deposited in bank</td><td class="num">{{ r.giving.payouts_deposited|money }}</td></tr>
     </table>
     {% if r.giving.timing_difference|abs > 0.009 %}
-    <p class="small muted">Difference of {{ r.giving.timing_difference|money }} between net gifts and payouts deposited. This is usually timing: gifts at month-end are paid out the next month. A difference that persists may mean a missing payout.</p>
+    <p class="small muted">Difference of {{ r.giving.timing_difference|money }} between net online payments and payouts deposited. This is usually timing: payments at month-end are paid out the next month. A difference that persists may mean a missing payout.</p>
     {% endif %}
   </div>
+</div>
+
+<h2 id="rent">Student housing rent</h2>
+<div class="panel">
+  <div class="stats" style="margin-bottom:8px">
+    <div class="stat"><div class="label">Rent collected</div><div class="value">{{ r.rent.total|money }}</div><div class="sub">prior month {{ r.rent.prior|money }}</div></div>
+    <div class="stat"><div class="label">Residents who paid online</div><div class="value">{{ r.rent.payers }}</div><div class="sub">{{ r.rent.payments }} payment{{ 's' if r.rent.payments != 1 }}</div></div>
+    <div class="stat"><div class="label">Fiscal YTD rent</div><div class="value">{{ r.rent.ytd|money }}</div></div>
+  </div>
+  {% if r.rent.by_payer %}
+  <div class="table-scroll">
+  <table>
+    <thead><tr><th>Resident</th><th class="num">Payments</th><th>Last paid</th><th class="num">Amount</th></tr></thead>
+    <tbody>{% for p in r.rent.by_payer %}<tr><td>{{ p.name }}</td><td class="num">{{ p.payments }}</td><td>{{ p.last_paid }}</td><td class="num">{{ p.amount|money }}</td></tr>{% endfor %}</tbody>
+  </table>
+  </div>
+  {% else %}
+  <p class="small muted" style="margin:0">No online rent payments this month.</p>
+  {% endif %}
+  <p class="small muted" style="margin-bottom:0">Online payments whose fund is “{{ rent_funds }}” count as rent, not gifts (change this in Settings). Rent paid by check counts too if you categorize the deposit as <b>Student Housing Rent</b>.</p>
 </div>
 
 <h2 id="receipts">Receipts</h2>

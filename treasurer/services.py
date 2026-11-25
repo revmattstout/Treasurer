@@ -1,5 +1,6 @@
 """Import operations shared by web uploads and the email inbox."""
 from . import ai
+from .db import is_rent_fund, rent_patterns
 from .categorize import apply_rules
 from .importers import (ImportError_, _with_occurrence, decode, parse_bank_file, parse_date,
                         parse_giving_csv)
@@ -48,18 +49,21 @@ def import_giving(conn, filename, data, platform=None, source_note=None):
     """Import an online giving CSV. Raises ImportError_."""
     records = parse_giving_csv(decode(data), platform)
     import_id = _record_import(conn, "giving", filename, source_note)
-    added = 0
+    pats = rent_patterns(conn)
+    added = rent = 0
     for r in records:
+        kind = "rent" if is_rent_fund(r["fund"], pats) else "gift"
         cur = conn.execute(
-            "INSERT OR IGNORE INTO donations(date, gross, fee, net, donor, fund, method, platform, import_id, fingerprint) "
-            "VALUES (?,?,?,?,?,?,?,?,?,?)",
+            "INSERT OR IGNORE INTO donations(date, gross, fee, net, donor, fund, method, platform, kind, import_id, fingerprint) "
+            "VALUES (?,?,?,?,?,?,?,?,?,?,?)",
             (r["date"], r["gross"], r["fee"], r["net"], r["donor"], r["fund"], r["method"],
-             r["platform"], import_id, r["fingerprint"]))
+             r["platform"], kind, import_id, r["fingerprint"]))
         added += cur.rowcount
+        rent += cur.rowcount if kind == "rent" else 0
     conn.execute("UPDATE imports SET rows_added=?, rows_skipped=? WHERE id=?",
                  (added, len(records) - added, import_id))
     conn.commit()
-    return {"added": added, "skipped": len(records) - added}
+    return {"added": added, "skipped": len(records) - added, "rent": rent}
 
 
 def add_receipt(conn, receipts_dir, filename, data, use_ai=True, purpose=None):

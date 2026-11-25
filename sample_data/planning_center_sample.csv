@@ -1,0 +1,9 @@
+Donation ID,Received At,Person Name,Fund,Payment Method,Amount,Fee,Net,Status
+5001,2026-10-01 09:12:00,Avery Brooks,Rent,card,450.00,13.35,436.65,succeeded
+5002,2026-10-01 10:40:00,Jordan Lee,Rent,ach,450.00,3.60,446.40,succeeded
+5003,2026-10-02 18:05:00,Sam Rivera,General Fund,card,100.00,3.20,96.80,succeeded
+5004,2026-10-03 08:30:00,Morgan Davis,Rent,ach,450.00,3.60,446.40,succeeded
+5005,2026-10-09 12:00:00,Casey Nguyen,Missions,card,50.00,1.75,48.25,succeeded
+5006,2026-10-15 07:45:00,Riley Patel,Rent,card,225.00,6.83,218.17,succeeded
+5007,2026-10-28 16:20:00,Riley Patel,Rent,card,225.00,6.83,218.17,succeeded
+5008,2026-10-29 11:11:00,Taylor Kim,Parent Ministry Fund,card,40.00,1.46,38.54,succeeded

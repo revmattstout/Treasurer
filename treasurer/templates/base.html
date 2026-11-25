@@ -16,7 +16,7 @@
       {% set ep = request.endpoint %}
       <a href="{{ url_for('main.upload') }}" class="{{ 'on' if ep == 'main.upload' }}">Upload</a>
       <a href="{{ url_for('main.transactions') }}" class="{{ 'on' if ep == 'main.transactions' }}">Transactions</a>
-      <a href="{{ url_for('main.donations') }}" class="{{ 'on' if ep == 'main.donations' }}">Giving</a>
+      <a href="{{ url_for('main.donations') }}" class="{{ 'on' if ep == 'main.donations' }}">Giving &amp; Rent</a>
       <a href="{{ url_for('main.receipts') }}" class="{{ 'on' if ep == 'main.receipts' }}">Receipts</a>
       <a href="{{ url_for('main.reports') }}" class="{{ 'on' if ep == 'main.report' }}">Reports</a>
       <a href="{{ url_for('main.settings') }}" class="{{ 'on' if ep == 'main.settings' }}">Settings</a>

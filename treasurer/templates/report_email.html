@@ -91,7 +91,7 @@
   </td></tr>
 
   <tr><td style="padding:8px 10px;">
-    <div style="font-size:16px;font-weight:700;margin:8px 0;">Bank &amp; giving</div>
+    <div style="font-size:16px;font-weight:700;margin:8px 0;">Bank, giving &amp; rent</div>
     <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;">
       <tr><td style="{{ cell }}">Beginning bank balance</td><td style="{{ num }}">{{ r.bank.beginning_balance|money }}</td></tr>
       <tr><td style="{{ cell }}">Deposits</td><td style="{{ num }}">{{ r.bank.deposits|money }}</td></tr>
@@ -101,7 +101,8 @@
       <tr><td style="{{ cell }}padding-left:20px;color:#5d6676;">{{ a.name }}</td><td style="{{ num }}color:#5d6676;">{{ a.ending|money }}</td></tr>
       {% endfor %}
       <tr><td style="{{ cell }}">Online gifts ({{ r.giving.gifts }} from {{ r.giving.donors }} donors)</td><td style="{{ num }}">{{ r.giving.total|money }}</td></tr>
-      <tr><td style="{{ cell }}">Giving platform fees</td><td style="{{ num }}">({{ r.giving.fees|money }})</td></tr>
+      <tr><td style="{{ cell }}">Student housing rent ({{ r.rent.payers }} resident{{ 's' if r.rent.payers != 1 }} paid online)</td><td style="{{ num }}">{{ r.rent.total|money }}</td></tr>
+      <tr><td style="{{ cell }}">Online payment fees (gifts and rent)</td><td style="{{ num }}">({{ r.giving.fees|money }})</td></tr>
       <tr><td style="{{ cell }}">Payouts deposited in bank</td><td style="{{ num }}">{{ r.giving.payouts_deposited|money }}</td></tr>
     </table>
   </td></tr>

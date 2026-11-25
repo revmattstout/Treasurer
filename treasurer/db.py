@@ -53,6 +53,7 @@ CREATE TABLE IF NOT EXISTS donations (
     fund TEXT,
     method TEXT,
     platform TEXT,
+    kind TEXT NOT NULL DEFAULT 'gift',   -- gift | rent (student housing payments)
     import_id INTEGER REFERENCES imports(id),
     fingerprint TEXT NOT NULL UNIQUE
 );
@@ -111,6 +112,7 @@ DEFAULT_CATEGORIES = [
     # Income
     ("Donations - Cash & Check", "income", None),
     ("Church & Conference Support", "income", None),
+    ("Student Housing Rent", "income", None),
     ("Grants", "income", None),
     ("Fundraisers & Events", "income", None),
     ("Interest", "income", None),
@@ -187,6 +189,9 @@ DEFAULT_SETTINGS = {
     "fiscal_year_start_month": "1",
     "receipt_required_over": "25",
     "report_recipients": "revmattstout@gmail.com",
+    # Funds in the online payment records (e.g. Planning Center) that are
+    # student housing rent rather than gifts. Comma-separated, whole words.
+    "rent_funds": "Rent",
     "report_schedule_enabled": "1",
     "report_send_hour": "8",
 }
@@ -225,7 +230,37 @@ def init_db(conn):
         )
     for k, v in DEFAULT_SETTINGS.items():
         conn.execute("INSERT OR IGNORE INTO settings(key, value) VALUES (?,?)", (k, v))
+    # Upgrades for databases created by earlier versions
+    cols = {r[1] for r in conn.execute("PRAGMA table_info(donations)")}
+    if "kind" not in cols:
+        conn.execute("ALTER TABLE donations ADD COLUMN kind TEXT NOT NULL DEFAULT 'gift'")
+        reclassify_rent(conn)
+    conn.execute("INSERT OR IGNORE INTO categories(name, kind) VALUES ('Student Housing Rent', 'income')")
     conn.commit()
+
+
+RENT_CATEGORY = "Student Housing Rent"
+
+
+def rent_patterns(conn):
+    raw = get_setting(conn, "rent_funds", "Rent") or ""
+    return [p.strip() for p in raw.split(",") if p.strip()]
+
+
+def is_rent_fund(fund, patterns):
+    """True if the fund name contains any pattern as a whole word,
+    e.g. "Rent" matches "Rent", "Rent - Fall 2026", "Housing rent" but not "Parent"."""
+    import re
+    return any(re.search(rf"(?<![A-Za-z]){re.escape(p)}(?![A-Za-z])", fund or "", re.IGNORECASE)
+               for p in patterns)
+
+
+def reclassify_rent(conn):
+    """Re-mark every online payment as rent or gift from its fund name."""
+    pats = rent_patterns(conn)
+    for r in conn.execute("SELECT id, fund FROM donations").fetchall():
+        conn.execute("UPDATE donations SET kind=? WHERE id=?",
+                     ("rent" if is_rent_fund(r["fund"], pats) else "gift", r["id"]))
 
 
 def get_setting(conn, key, default=None):

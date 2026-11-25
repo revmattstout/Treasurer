@@ -10,7 +10,7 @@ from flask import (Blueprint, Response, abort, current_app, flash, redirect, ren
 
 from . import ai, services
 from .categorize import apply_rules, rule_pattern_from_description
-from .db import get_db, get_setting, set_setting
+from .db import get_db, get_setting, reclassify_rent, set_setting
 from .importers import ImportError_, parse_date, parse_amount
 from .receipts import auto_match, candidates
 from .reports import available_months, build_report, report_csv_text, report_for_ai
@@ -150,7 +150,8 @@ def upload_giving():
         except ImportError_ as e:
             flash(f"{f.filename}: {e}", "error")
             continue
-        flash(f"{f.filename}: imported {res['added']} gifts"
+        flash(f"{f.filename}: imported {res['added'] - res['rent']} gifts"
+              + (f" and {res['rent']} rent payments" if res["rent"] else "")
               + (f" ({res['skipped']} already imported, skipped)" if res["skipped"] else "") + ".",
               "success")
     return redirect(url_for("main.donations"))
@@ -295,12 +296,16 @@ def suggest():
 def donations():
     conn = get_db()
     month = request.args.get("month") or ""
-    sql, params = "SELECT * FROM donations", []
+    kind = request.args.get("kind") if request.args.get("kind") in ("gift", "rent") else ""
+    sql, params = "SELECT * FROM donations WHERE 1=1", []
     if MONTH_RE.match(month):
-        sql += " WHERE substr(date,1,7)=?"
+        sql += " AND substr(date,1,7)=?"
         params.append(month)
+    if kind:
+        sql += " AND kind=?"
+        params.append(kind)
     rows = conn.execute(sql + " ORDER BY date DESC, id DESC LIMIT 2000", params).fetchall()
-    return render_template("donations.html", rows=rows, months=available_months(conn), month=month)
+    return render_template("donations.html", rows=rows, months=available_months(conn), month=month, kind=kind)
 
 
 # ---------------------------------------------------------------- receipts
@@ -395,7 +400,8 @@ def report(month):
     _check_month(month)
     rep = build_report(conn, month)
     narrative = conn.execute("SELECT * FROM narratives WHERE month=?", (month,)).fetchone()
-    return render_template("report.html", r=rep, months=available_months(conn), narrative=narrative)
+    return render_template("report.html", r=rep, months=available_months(conn), narrative=narrative,
+                           rent_funds=get_setting(conn, "rent_funds", "Rent"))
 
 
 @bp.route("/reports/<month>/narrative", methods=["POST"])
@@ -476,6 +482,11 @@ def settings():
             hour = request.form.get("report_send_hour", type=int)
             set_setting(conn, "report_send_hour", str(min(max(hour if hour is not None else 8, 0), 23)))
             flash("Report email settings saved.", "success")
+        elif action == "rent_funds":
+            set_setting(conn, "rent_funds", request.form.get("rent_funds", "").strip())
+            reclassify_rent(conn)
+            n = conn.execute("SELECT COUNT(*) FROM donations WHERE kind='rent'").fetchone()[0]
+            flash(f"Saved. {n} online payment(s) are now counted as rent.", "success")
         elif action == "budgets":
             for c in _categories(conn):
                 v = request.form.get(f"budget_{c['name']}", "").strip()
@@ -523,7 +534,8 @@ def settings():
     from . import mailer
     rules = conn.execute("SELECT * FROM rules ORDER BY category, pattern").fetchall()
     st = {k: get_setting(conn, k) for k in ("org_name", "fiscal_year_start_month", "receipt_required_over",
-                                            "report_recipients", "report_schedule_enabled", "report_send_hour")}
+                                            "report_recipients", "report_schedule_enabled", "report_send_hour",
+                                            "rent_funds")}
     next_date, next_month = mailer.next_send(conn)
     sends = conn.execute("SELECT * FROM report_sends ORDER BY id DESC LIMIT 12").fetchall()
     return render_template("settings.html", categories=_categories(conn), rules=rules, st=st,

@@ -19,7 +19,7 @@ from collections import defaultdict
 from datetime import date
 
 from .categorize import rule_pattern_from_description
-from .db import get_setting
+from .db import RENT_CATEGORY, get_setting
 
 UNCAT_IN = "Uncategorized deposits"
 UNCAT_OUT = "Uncategorized withdrawals"
@@ -89,24 +89,35 @@ def period_totals(conn, start, end):
         else:
             expense[UNCAT_OUT] += -amt
 
-    gifts = conn.execute(
-        "SELECT fund, SUM(gross) gross, SUM(fee) fee, SUM(net) net, COUNT(*) n, "
-        "COUNT(DISTINCT donor) donors FROM donations WHERE date BETWEEN ? AND ? GROUP BY fund",
+    online = conn.execute(
+        "SELECT kind, fund, SUM(gross) gross, SUM(fee) fee, SUM(net) net, COUNT(*) n "
+        "FROM donations WHERE date BETWEEN ? AND ? GROUP BY kind, fund",
         (start, end),
     ).fetchall()
     fees = net = 0.0
-    n_gifts = 0
-    for g in gifts:
-        giving_by_fund[g["fund"]] += g["gross"]
+    n_gifts = n_rent = 0
+    rent_total = 0.0
+    for g in online:
+        # Fees and payouts cover gifts and rent alike (same platform)
         fees += g["fee"]
         net += g["net"]
-        n_gifts += g["n"]
+        if g["kind"] == "rent":
+            rent_total += g["gross"]
+            n_rent += g["n"]
+        else:
+            giving_by_fund[g["fund"]] += g["gross"]
+            n_gifts += g["n"]
+    if rent_total:
+        income[RENT_CATEGORY] += rent_total
     if fees:
         expense[FEES_CATEGORY] += fees
     donors = conn.execute(
         "SELECT COUNT(DISTINCT donor) FROM donations WHERE date BETWEEN ? AND ? "
-        "AND donor != 'Anonymous'", (start, end)
+        "AND kind = 'gift' AND donor != 'Anonymous'", (start, end)
     ).fetchone()[0]
+    renters = conn.execute(
+        "SELECT COUNT(DISTINCT donor) FROM donations WHERE date BETWEEN ? AND ? AND kind = 'rent'",
+        (start, end)).fetchone()[0]
 
     online_total = sum(giving_by_fund.values())
     total_income = online_total + sum(income.values())
@@ -118,6 +129,9 @@ def period_totals(conn, start, end):
         "online_giving_net": round(net, 2),
         "gift_count": n_gifts,
         "donor_count": donors,
+        "rent_online_total": round(rent_total, 2),
+        "rent_payment_count": n_rent,
+        "rent_payer_count": renters,
         "other_income": dict(income),
         "expenses": dict(expense),
         "payouts_deposited": round(payouts, 2),
@@ -248,6 +262,19 @@ def build_report(conn, month):
             "payouts_deposited": cur["payouts_deposited"],
             "timing_difference": round(cur["online_giving_net"] - cur["payouts_deposited"], 2),
         },
+        "rent": {
+            "online_total": cur["rent_online_total"],
+            "payments": cur["rent_payment_count"],
+            "payers": cur["rent_payer_count"],
+            # Includes any rent checks deposited at the bank and categorized as rent
+            "total": round(cur["other_income"].get(RENT_CATEGORY, 0.0), 2),
+            "prior": round(prv["other_income"].get(RENT_CATEGORY, 0.0), 2),
+            "ytd": round(ytd["other_income"].get(RENT_CATEGORY, 0.0), 2),
+            "by_payer": [dict(r) for r in conn.execute(
+                "SELECT donor AS name, COUNT(*) AS payments, SUM(gross) AS amount, MAX(date) AS last_paid "
+                "FROM donations WHERE kind='rent' AND date BETWEEN ? AND ? GROUP BY donor ORDER BY donor",
+                (start, end))],
+        },
         "other_income": lines("other_income"),
         "expenses": lines("expenses"),
         "bank": bank_summary(conn, start, end),
@@ -273,6 +300,7 @@ def report_for_ai(report):
         {"date": m["date"], "description": m["description"], "amount": m["amount"]}
         for m in report["receipts"]["missing"][:25]
     ]
+    r["rent"] = {k: v for k, v in report["rent"].items() if k != "by_payer"}  # no resident names
     r["uncategorized_count"] = len(report["uncategorized"])
     r.pop("uncategorized", None)
     return r

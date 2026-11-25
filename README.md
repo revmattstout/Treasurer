@@ -19,6 +19,16 @@ Monthly financial reports for the **VSU Wesley Foundation**. You upload bank sta
 
   You can print it, save it as a PDF, or download it as CSV.
 
+### Student housing rent
+
+Residents of the student house pay rent through Planning Center, in the same export as online gifts. Any payment whose **fund** is "Rent" is treated as rent, not as a gift:
+
+- **On the report:** rent has its own income line, **Student Housing Rent**, which you can budget like any category. It also gets its own section showing total collected, how many residents paid, and a list of who paid and when.
+- **Giving totals:** gift counts, donor counts, and the average gift leave rent out.
+- **Fees:** Planning Center fees on rent are included under processing fees. The payout reconciliation compares deposits against gifts and rent together, because Planning Center pays both out in the same deposits.
+- **Rent paid by check:** categorize the bank deposit as **Student Housing Rent** and it's included in the rent total.
+- **Other fund names:** if rent shows up under another fund name (e.g. "Housing Deposit"), add it under **Settings → Student housing rent**.
+
 ### How online giving is counted
 
 Gifts are counted **once**, from the giving records, at their gross amount by fund. When the platform later deposits the lump-sum payout in the bank, that deposit is categorized **Online Giving Payout** and isn't counted as income again. Platform fees appear under **Bank & Processing Fees**. The report also compares net gifts to payouts deposited, so a missing payout stands out.
