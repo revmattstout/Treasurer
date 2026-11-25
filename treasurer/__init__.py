@@ -35,9 +35,19 @@ def create_app(test_config=None):
         RECEIPTS_DIR=os.path.join(data_dir, "receipts"),
         MAX_CONTENT_LENGTH=64 * 1024 * 1024,
         APP_PASSWORD=os.environ.get("APP_PASSWORD"),
+        # Running on a public server (Render sets RENDER=true): require a
+        # password and HTTPS-only cookies.
+        HOSTED=bool(os.environ.get("RENDER") or os.environ.get("TREASURER_HOSTED")),
+        SESSION_COOKIE_SAMESITE="Lax",
+        SESSION_COOKIE_HTTPONLY=True,
+        PERMANENT_SESSION_LIFETIME=60 * 60 * 24 * 14,
     )
     if test_config:
         app.config.update(test_config)
+    if app.config["HOSTED"]:
+        from werkzeug.middleware.proxy_fix import ProxyFix
+        app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1)
+        app.config["SESSION_COOKIE_SECURE"] = True
     os.makedirs(os.path.dirname(app.config["DATABASE"]), exist_ok=True)
     os.makedirs(app.config["RECEIPTS_DIR"], exist_ok=True)
     app.secret_key = app.config.get("SECRET_KEY") or os.environ.get("SECRET_KEY") or _persistent_key(data_dir)
@@ -60,9 +70,19 @@ def create_app(test_config=None):
             session["csrf"] = secrets.token_hex(16)
         return {"csrf_token": session["csrf"]}
 
+    @app.route("/healthz")
+    def healthz():
+        return "ok"
+
     @app.before_request
     def require_login():
+        if request.endpoint == "healthz":
+            return None
         if not app.config.get("APP_PASSWORD"):
+            if app.config.get("HOSTED"):
+                # Never serve financial data publicly without a password
+                return ("This app needs a password before it can be used online. Set the APP_PASSWORD "
+                        "environment variable in the hosting dashboard and redeploy."), 503
             return None
         if session.get("ok") or request.endpoint in ("main.login", "static"):
             return None

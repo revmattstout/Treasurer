@@ -36,6 +36,25 @@ python run.py            # then open http://127.0.0.1:5000
 
 Data is stored in `instance/` (a SQLite database plus the receipt files). Back that folder up. Set `TREASURER_DATA_DIR` to keep it somewhere else.
 
+## Putting it on the web (Render)
+
+The repository includes a `render.yaml` that sets everything up on [Render](https://render.com). It costs about **$7.25/month**: a Starter instance plus a 1 GB disk. The free tier won't work, because it sleeps (so email isn't checked and the report isn't sent) and deletes uploaded files whenever it restarts.
+
+1. Sign up at render.com with your GitHub account.
+2. Click **New → Blueprint** and choose the `treasurer` repository.
+3. Render asks for the secret settings. Fill in:
+   - **APP_PASSWORD**: the password everyone will use to sign in. **Required.** The site refuses to show anything until it's set.
+   - **TREASURER_EMAIL_APP_PASSWORD**: the 16-letter Gmail app password.
+   - **TREASURER_EMAIL_ALLOWED_SENDERS**: the addresses allowed to email in receipts.
+   - **ANTHROPIC_API_KEY**: optional. It lets Claude read receipts and PDFs and draft summaries.
+   - **TREASURER_APP_URL**: leave it blank for now.
+4. Click **Apply**. After a few minutes the site is live at an address like `https://wesley-treasurer.onrender.com`.
+5. Copy that address into **TREASURER_APP_URL** (Environment tab), so the monthly email links back to the report.
+
+Your data lives on the Render disk at `/var/data`. Render snapshots disks daily. For an extra copy, download each month's CSV from the report page.
+
+Each time new code is pushed to the branch, Render redeploys automatically.
+
 ### Optional settings
 
 Copy `.env.example` to `.env` and fill it in, or set these as environment variables. The `.env` file is git-ignored.

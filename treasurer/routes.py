@@ -3,6 +3,7 @@ import hmac
 import io
 import os
 import re
+import time
 
 from flask import (Blueprint, Response, abort, current_app, flash, redirect, render_template,
                    request, send_from_directory, session, url_for)
@@ -45,14 +46,34 @@ def _check_month(month):
 
 # ---------------------------------------------------------------- auth
 
+_failed_logins = {}  # ip -> list of failure timestamps
+LOGIN_WINDOW_SECONDS = 15 * 60
+LOGIN_MAX_FAILURES = 10
+
+
+def _too_many_failures(ip):
+    now = time.time()
+    recent = [t for t in _failed_logins.get(ip, []) if now - t < LOGIN_WINDOW_SECONDS]
+    _failed_logins[ip] = recent
+    return len(recent) >= LOGIN_MAX_FAILURES
+
+
 @bp.route("/login", methods=["GET", "POST"])
 def login():
     if request.method == "POST":
+        ip = request.remote_addr or "?"
+        if _too_many_failures(ip):
+            flash("Too many incorrect attempts. Wait 15 minutes and try again.", "error")
+            return render_template("login.html"), 429
         pw = current_app.config.get("APP_PASSWORD") or ""
-        if hmac.compare_digest(request.form.get("password", ""), pw):
+        if pw and hmac.compare_digest(request.form.get("password", "").encode(), pw.encode()):
+            _failed_logins.pop(ip, None)
+            session.clear()
+            session.permanent = True
             session["ok"] = True
             nxt = request.args.get("next") or ""
             return redirect(nxt if nxt.startswith("/") and not nxt.startswith("//") else url_for("main.index"))
+        _failed_logins.setdefault(ip, []).append(time.time())
         flash("Incorrect password.", "error")
     return render_template("login.html")
 

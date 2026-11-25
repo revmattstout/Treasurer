@@ -1,0 +1,43 @@
+# Render Blueprint: Dashboard -> New -> Blueprint -> pick this repository.
+# Render asks for the values marked "sync: false" when you create it.
+services:
+  - type: web
+    name: wesley-treasurer
+    runtime: python
+    # Starter (paid) is needed for the persistent disk and so the app stays
+    # awake to check email and send the monthly report. Free instances sleep
+    # and lose uploaded files on every restart.
+    plan: starter
+    region: virginia
+    buildCommand: pip install -r requirements.txt
+    # One worker: the email checker and report scheduler run inside it.
+    # Long timeout: Claude can take a minute to read a PDF statement.
+    startCommand: gunicorn run:app --workers 1 --threads 4 --timeout 300 --bind 0.0.0.0:$PORT
+    healthCheckPath: /healthz
+    disk:
+      name: treasurer-data
+      mountPath: /var/data
+      sizeGB: 1
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.12.8
+      - key: TREASURER_DATA_DIR
+        value: /var/data
+      - key: SECRET_KEY
+        generateValue: true
+      - key: APP_PASSWORD
+        sync: false
+      - key: ANTHROPIC_API_KEY
+        sync: false
+      - key: TREASURER_EMAIL_ADDRESS
+        value: vsuwesleyfinance@gmail.com
+      - key: TREASURER_EMAIL_APP_PASSWORD
+        sync: false
+      - key: TREASURER_EMAIL_ALLOWED_SENDERS
+        sync: false
+      - key: TREASURER_EMAIL_POLL_MINUTES
+        value: "10"
+      - key: TREASURER_TIMEZONE
+        value: America/New_York
+      - key: TREASURER_APP_URL
+        sync: false
