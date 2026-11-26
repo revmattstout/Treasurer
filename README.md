@@ -139,12 +139,23 @@ Gmail won't accept the account's regular password here, so you need the app pass
 
 On the **third Wednesday of each month** at 8 AM Eastern, last month's report is emailed to **revmattstout@gmail.com**. You can change the recipients, send time, or turn it off under **Settings → Monthly report email**.
 
-**What's in the email:**
+**What's in the email:** a short cover note with income, expenses, net income, the ending bank balance and the month's summary, plus the **board report PDF**.
 
-- The summary numbers, the statement of activities, bank and giving totals, and the list of expenses missing receipts.
-- The summary narrative, if you've written one. If you haven't and Claude is on, Claude drafts one, labeled as a draft.
-- Attachments: the transaction detail (CSV) and the full report (HTML).
-- If nothing has been uploaded for that month yet, the email arrives as a "(no data yet)" reminder instead.
+**The board report PDF** is guaranteed to fit on one 8.5×11 sheet, front and back. The app builds it, counts the pages, and if it runs long it rebuilds with slightly smaller type and a shorter summary until it fits. It contains:
+
+- Every income and expense category: this month, prior month, fiscal year to date, and budget with better/(worse).
+- Cash position for each account.
+- Giving totals: online gifts, gifts by check, average gift, fees.
+- Student housing rent: collected, prior month, year to date, and how many residents paid.
+- Record-keeping checks: receipts on file, missing receipts, uncategorized items.
+
+It **never lists individual donors, residents, check writers or purchases**. Those stay in the app for the treasurer.
+
+To preview it, use **Board report (PDF)** on any report page. **Print full detail** prints the treasurer's version with names and line items.
+
+If you haven't written a summary and Claude is on, Claude drafts one: about 150 words, in category terms, without naming anyone.
+
+If nothing has been uploaded for a month yet, the email still goes out, marked "(no data yet)".
 
 The email uses the Gmail account and app password from the email-import setup above. Sending is set up as soon as `TREASURER_EMAIL_ADDRESS` and `TREASURER_EMAIL_APP_PASSWORD` are set.
 

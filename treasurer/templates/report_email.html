@@ -5,43 +5,35 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>{{ org_name }}: Treasurer's report for {{ month_label }}</title>
 </head>
+{#- Board-safe cover note: totals and the summary only. The full board
+    report (every category) is the attached PDF. No individual donors,
+    residents or purchases appear here. -#}
 {% set s = r.summary %}
-{% set cell = "padding:6px 4px;border-bottom:1px solid #e2e5ea;font-size:13px;" %}
-{% set num = "padding:6px 4px 6px 6px;border-bottom:1px solid #e2e5ea;font-size:12.5px;text-align:right;white-space:nowrap;font-variant-numeric:tabular-nums;" %}
-{% set has_budget = (r.expenses + r.other_income)|selectattr('budget')|list|length > 0 %}
-{% set th = "padding:6px 4px;border-bottom:1px solid #e2e5ea;font-size:11px;color:#5d6676;text-transform:uppercase;letter-spacing:.03em;text-align:right;" %}
-{% set sub = "padding:6px 8px;background:#eef1f5;font-weight:600;font-size:14px;" %}
-{% set total = "padding:6px 4px 6px 6px;border-top:2px solid #1d2330;font-weight:700;font-size:12.5px;text-align:right;white-space:nowrap;" %}
 <body style="margin:0;padding:0;background:#f6f7f9;font-family:-apple-system,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;color:#1d2330;">
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#f6f7f9;">
 <tr><td align="center" style="padding:8px 2px;">
-<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:680px;background:#ffffff;border:1px solid #e2e5ea;border-radius:10px;">
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:640px;background:#ffffff;border:1px solid #e2e5ea;border-radius:10px;">
   <tr><td style="background:#b3122e;color:#ffffff;padding:14px 16px;border-radius:10px 10px 0 0;">
     <table role="presentation" cellpadding="0" cellspacing="0"><tr>
       {% if logo_src %}<td valign="middle" style="padding-right:12px;"><img src="{{ logo_src }}" width="60" height="60" alt="{{ org_name }} logo" style="display:block;width:60px;height:60px;border:0;"></td>{% endif %}
       <td valign="middle" style="color:#ffffff;">
         <div style="font-size:13px;opacity:.9;">{{ org_name }}</div>
         <div style="font-size:21px;font-weight:700;">Treasurer's Report: {{ month_label }}</div>
-        <div style="font-size:12px;opacity:.85;">{{ r.period.start }} to {{ r.period.end }} · fiscal year from {{ r.fiscal_year_start }} · cash basis</div>
+        <div style="font-size:12px;opacity:.85;">{{ r.period.start }} to {{ r.period.end }} · cash basis</div>
       </td>
     </tr></table>
   </td></tr>
 
   <tr><td style="padding:16px 10px 4px;">
   {% if not has_data %}
-    <p style="background:#fff6e0;border:1px solid #f1cf79;border-radius:8px;padding:10px 12px;margin:0 0 12px;">
-      No bank statement or giving records have been uploaded for {{ month_label }} yet. Upload them and use
-      “Email this report” on the report page to send an updated copy.</p>
-  {% elif r.uncategorized %}
-    <p style="background:#fff6e0;border:1px solid #f1cf79;border-radius:8px;padding:10px 12px;margin:0 0 12px;">
-      {{ r.uncategorized|length }} transaction{{ 's' if r.uncategorized|length != 1 }} this month
-      {{ 'are' if r.uncategorized|length != 1 else 'is' }} still uncategorized, so totals by category may change.</p>
+    <p style="background:#fff6e0;border:1px solid #f1cf79;border-radius:8px;padding:10px 12px;margin:0 0 12px;font-size:14px;">
+      No bank statement or giving records have been uploaded for {{ month_label }} yet, so this report is empty.
+      An updated copy can be sent once they're in.</p>
   {% endif %}
-
-    {% set tiles = [("Income", s.income, "prior " ~ (s.prior_income|money)),
-                    ("Expenses", s.expense, "prior " ~ (s.prior_expense|money)),
-                    ("Net", s.net, "fiscal YTD " ~ (s.ytd_net|money)),
-                    ("Bank balance", r.bank.ending_balance, "end of month")] %}
+    {% set tiles = [("Income", s.income, "prior month " ~ (s.prior_income|money)),
+                    ("Expenses", s.expense, "prior month " ~ (s.prior_expense|money)),
+                    ("Net income (loss)", s.net, "fiscal year to date " ~ (s.ytd_net|money)),
+                    ("Ending bank balance", r.bank.ending_balance, "beginning " ~ (r.bank.beginning_balance|money))] %}
     <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
       {% for row in tiles|batch(2) %}
       <tr>
@@ -49,7 +41,7 @@
         <td width="50%" valign="top" style="padding:4px;">
           <div style="border:1px solid #e2e5ea;border-radius:8px;padding:8px 10px;">
             <div style="font-size:12px;color:#5d6676;">{{ label }}</div>
-            <div style="font-size:18px;font-weight:700;{{ 'color:#b42318;' if label == 'Net' and v is not none and v < 0 }}">{{ v|money }}</div>
+            <div style="font-size:18px;font-weight:700;{{ 'color:#b42318;' if label.startswith('Net') and v is not none and v < 0 }}">{{ v|money }}</div>
             <div style="font-size:11px;color:#5d6676;">{{ note }}</div>
           </div>
         </td>
@@ -60,71 +52,20 @@
   </td></tr>
 
   {% if narrative %}
-  <tr><td style="padding:8px 10px;">
+  <tr><td style="padding:8px 14px;">
     <div style="font-size:16px;font-weight:700;margin:8px 0;">Summary</div>
-    {% if narrative_is_draft %}<div style="font-size:12px;color:#4b2aa8;margin-bottom:6px;">Draft written by Claude from the numbers below. Please review before sharing.</div>{% endif %}
+    {% if narrative_is_draft %}<div style="font-size:12px;color:#4b2aa8;margin-bottom:6px;">Draft written by Claude from the report figures.</div>{% endif %}
     {% for para in narrative.text.split('\n') if para.strip() %}<p style="margin:0 0 10px;font-size:14px;line-height:1.5;">{{ para }}</p>{% endfor %}
   </td></tr>
   {% endif %}
 
-  <tr><td style="padding:8px 10px;">
-    <div style="font-size:16px;font-weight:700;margin:8px 0;">Statement of activities</div>
-    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;">
-      <tr><td style="{{ th }}text-align:left;"></td><td style="{{ th }}">Month</td><td style="{{ th }}">Prior</td><td style="{{ th }}">Year to date</td>{% if has_budget %}<td style="{{ th }}">Budget</td>{% endif %}</tr>
-      <tr><td colspan="{{ 5 if has_budget else 4 }}" style="{{ sub }}">Income</td></tr>
-      {% for f in r.giving.by_fund %}
-      <tr><td style="{{ cell }}">Online giving: {{ f.name }}</td><td style="{{ num }}">{{ f.amount|money }}</td><td style="{{ num }}">{{ f.prior|money }}</td><td style="{{ num }}">{{ f.ytd|money }}</td>{% if has_budget %}<td style="{{ num }}"></td>{% endif %}</tr>
-      {% endfor %}
-      {% for l in r.other_income %}
-      <tr><td style="{{ cell }}">{{ l.name }}</td><td style="{{ num }}">{{ l.amount|money }}</td><td style="{{ num }}">{{ l.prior|money }}</td><td style="{{ num }}">{{ l.ytd|money }}</td>{% if has_budget %}<td style="{{ num }}">{{ l.budget|money if l.budget }}</td>{% endif %}</tr>
-      {% endfor %}
-      <tr><td style="{{ total }}text-align:left;">Total income</td><td style="{{ total }}">{{ s.income|money }}</td><td style="{{ total }}">{{ s.prior_income|money }}</td><td style="{{ total }}">{{ s.ytd_income|money }}</td>{% if has_budget %}<td style="{{ total }}"></td>{% endif %}</tr>
-      <tr><td colspan="{{ 5 if has_budget else 4 }}" style="{{ sub }}">Expenses</td></tr>
-      {% for l in r.expenses %}
-      <tr><td style="{{ cell }}">{{ l.name }}</td><td style="{{ num }}">{{ l.amount|money }}</td><td style="{{ num }}">{{ l.prior|money }}</td><td style="{{ num }}">{{ l.ytd|money }}</td>
-        {% if has_budget %}<td style="{{ num }}{{ 'color:#b42318;' if l.variance is not none and l.variance < 0 }}">{{ l.budget|money if l.budget }}</td>{% endif %}</tr>
-      {% endfor %}
-      <tr><td style="{{ total }}text-align:left;">Total expenses</td><td style="{{ total }}">{{ s.expense|money }}</td><td style="{{ total }}">{{ s.prior_expense|money }}</td><td style="{{ total }}">{{ s.ytd_expense|money }}</td>{% if has_budget %}<td style="{{ total }}"></td>{% endif %}</tr>
-      <tr><td style="{{ total }}text-align:left;">Net income (loss)</td><td style="{{ total }}{{ 'color:#b42318;' if s.net < 0 }}">{{ s.net|money }}</td><td style="{{ total }}">{{ s.prior_net|money }}</td><td style="{{ total }}{{ 'color:#b42318;' if s.ytd_net < 0 }}">{{ s.ytd_net|money }}</td>{% if has_budget %}<td style="{{ total }}"></td>{% endif %}</tr>
-    </table>
-    {% if has_budget %}<div style="font-size:11px;color:#5d6676;margin-top:4px;">Budget column turns red when a category is over its monthly budget.</div>{% endif %}
-  </td></tr>
-
-  <tr><td style="padding:8px 10px;">
-    <div style="font-size:16px;font-weight:700;margin:8px 0;">Bank, giving &amp; rent</div>
-    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;">
-      <tr><td style="{{ cell }}">Beginning bank balance</td><td style="{{ num }}">{{ r.bank.beginning_balance|money }}</td></tr>
-      <tr><td style="{{ cell }}">Deposits</td><td style="{{ num }}">{{ r.bank.deposits|money }}</td></tr>
-      <tr><td style="{{ cell }}">Withdrawals</td><td style="{{ num }}">({{ r.bank.withdrawals|money }})</td></tr>
-      <tr><td style="{{ cell }}font-weight:700;">Ending bank balance</td><td style="{{ num }}font-weight:700;">{{ r.bank.ending_balance|money }}</td></tr>
-      {% for a in r.bank.accounts if r.bank.accounts|length > 1 %}
-      <tr><td style="{{ cell }}padding-left:20px;color:#5d6676;">{{ a.name }}</td><td style="{{ num }}color:#5d6676;">{{ a.ending|money }}</td></tr>
-      {% endfor %}
-      <tr><td style="{{ cell }}">Online gifts ({{ r.giving.gifts }} from {{ r.giving.donors }} donors)</td><td style="{{ num }}">{{ r.giving.total|money }}</td></tr>
-      <tr><td style="{{ cell }}">Check gifts matched to deposits ({{ r.checks.gift_count }} from {{ r.checks.donor_count }} donor{{ 's' if r.checks.donor_count != 1 }})</td><td style="{{ num }}">{{ r.checks.gift_total|money }}</td></tr>
-      <tr><td style="{{ cell }}">Student housing rent ({{ r.rent.payers }} resident{{ 's' if r.rent.payers != 1 }} paid online)</td><td style="{{ num }}">{{ r.rent.total|money }}</td></tr>
-      <tr><td style="{{ cell }}">Online payment fees (gifts and rent)</td><td style="{{ num }}">({{ r.giving.fees|money }})</td></tr>
-      <tr><td style="{{ cell }}">Payouts deposited in bank</td><td style="{{ num }}">{{ r.giving.payouts_deposited|money }}</td></tr>
-    </table>
-  </td></tr>
-
-  <tr><td style="padding:8px 10px;">
-    <div style="font-size:16px;font-weight:700;margin:8px 0;">Receipts</div>
-    <p style="font-size:14px;margin:0 0 8px;">{{ r.receipts.receipted_count }} of {{ r.receipts.expense_count }} withdrawals have a receipt on file.
-    {% if r.receipts.missing %}{{ r.receipts.missing|length }} of {{ r.receipts.threshold|money }} or more ({{ r.receipts.missing_total|money }}) are missing one:{% endif %}</p>
-    {% if r.receipts.missing %}
-    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;">
-      {% for m in r.receipts.missing %}
-      <tr><td style="{{ cell }}white-space:nowrap;">{{ m.date }}</td><td style="{{ cell }}">{{ m.description }}</td><td style="{{ num }}">{{ (-m.amount)|money }}</td></tr>
-      {% endfor %}
-    </table>
-    {% endif %}
-  </td></tr>
-
-  <tr><td style="padding:12px 10px 18px;font-size:12px;color:#5d6676;">
-    The transaction detail, including who each deposited check was from, is attached as a spreadsheet (CSV).
-    {% if app_url %}<a href="{{ app_url.rstrip('/') }}/reports/{{ r.month }}" style="color:#1f4e79;">Open this report in the treasurer app</a>.{% endif %}
-    This email is sent automatically on the third Wednesday of each month.
+  <tr><td style="padding:8px 14px 18px;">
+    <p style="margin:0 0 8px;font-size:14px;"><b>The full report is attached as a PDF</b>: every income and expense category
+      for the month, the prior month, the fiscal year to date and budget, plus cash, giving, student housing and
+      record-keeping summaries. It prints on one sheet, front and back.</p>
+    <p style="margin:0;font-size:12px;color:#5d6676;">
+      {% if app_url %}<a href="{{ app_url.rstrip('/') }}/reports/{{ r.month }}" style="color:#1f4e79;">Open this report in the treasurer app</a> (treasurer login). {% endif %}
+      Sent automatically on the third Wednesday of each month.</p>
   </td></tr>
 </table>
 </td></tr>

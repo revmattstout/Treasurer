@@ -318,11 +318,10 @@ def build_report(conn, month):
 def report_for_ai(report):
     """A trimmed copy of the report for the narrative prompt (no donor names)."""
     r = dict(report)
-    r["receipts"] = dict(report["receipts"])
-    r["receipts"]["missing"] = [
-        {"date": m["date"], "description": m["description"], "amount": m["amount"]}
-        for m in report["receipts"]["missing"][:25]
-    ]
+    # Category-level only: no individual purchases, donors or residents
+    r["receipts"] = {k: v for k, v in report["receipts"].items() if k != "missing"}
+    r["receipts"]["missing_count"] = len(report["receipts"]["missing"])
+    r.pop("top_payees", None)
     r["rent"] = {k: v for k, v in report["rent"].items() if k != "by_payer"}  # no resident names
     c = report["checks"]
     r["checks"] = {k: c[k] for k in ("gift_total", "gift_count", "donor_count", "rent_total", "unmatched_count")}

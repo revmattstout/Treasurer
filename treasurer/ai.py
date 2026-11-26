@@ -209,7 +209,9 @@ def write_narrative(report: dict, org_name: str) -> str:
         "ministry nonprofit, to be read by its board of directors. Be factual, concise and warm. "
         "Use only the numbers provided. Point out notable changes from the prior month, categories "
         "over budget, expenses missing receipts, and anything that needs the board's attention. "
-        "Do not invent explanations for spending; when a reason is unknown, say it may be worth asking."
+        "Do not invent explanations for spending; when a reason is unknown, say it may be worth asking. "
+        "Speak in terms of categories and totals: never name individual donors, residents, vendors or "
+        "purchases. Keep it to about 150 words so the report fits on one printed sheet."
     )
     content = [{"type": "text", "text": "Monthly report data (JSON):\n" + json.dumps(report, default=str)}]
     return _parse(content, Narrative, system, effort="medium", max_tokens=8000).summary

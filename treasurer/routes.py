@@ -591,6 +591,19 @@ def report_email(month):
     return redirect(url_for("main.report", month=month))
 
 
+@bp.route("/reports/<month>/board.pdf")
+def report_board_pdf(month):
+    from .board_pdf import build_board_pdf
+    conn = get_db()
+    _check_month(month)
+    logo = os.path.join(current_app.static_folder, "logo.png")
+    pdf, _ = build_board_pdf(conn, month, get_setting(conn, "org_name", "VSU Wesley Foundation"),
+                             logo if os.path.exists(logo) else None)
+    disp = "attachment" if request.args.get("download") else "inline"
+    return Response(pdf, mimetype="application/pdf",
+                    headers={"Content-Disposition": f'{disp}; filename="Wesley Treasurer\'s Report {month}.pdf"'})
+
+
 @bp.route("/reports/<month>.csv")
 def report_csv(month):
     conn = get_db()

@@ -16,9 +16,10 @@
     <form method="get" class="inline" onsubmit="location.href='{{ url_for('main.reports') }}/'+this.m.value;return false">
       <select name="m" onchange="this.form.onsubmit()">{% for m in months %}<option value="{{ m }}" {{ 'selected' if m == r.month }}>{{ m|month_name }}</option>{% endfor %}</select>
     </form>
-    <button class="secondary" onclick="window.print()">Print / save PDF</button>
+    <a class="btn" href="{{ url_for('main.report_board_pdf', month=r.month) }}" target="_blank">Board report (PDF)</a>
+    <button class="secondary" onclick="window.print()">Print full detail</button>
     <a class="btn secondary" href="{{ url_for('main.report_csv', month=r.month) }}">Download CSV</a>
-    <form method="post" action="{{ url_for('main.report_email', month=r.month) }}" class="inline">{{ csrf() }}<button class="secondary">Email this report</button></form>
+    <form method="post" action="{{ url_for('main.report_email', month=r.month) }}" class="inline" onsubmit="return confirm('Email the board report for {{ r.month|month_name }} to the recipients in Settings?')">{{ csrf() }}<button class="secondary">Email board report</button></form>
   </div>
 </div>
 

@@ -94,14 +94,20 @@ def test_scheduled_send_once(app, client, smtp_env):
     parsed = email.message_from_bytes(msg.as_bytes(), policy=email.policy.default)
     html = parsed.get_body(preferencelist=("html",)).get_content()
     assert "Treasurer's Report: October 2026" in html and "$1,075.00" in html
+    assert "attached as a PDF" in html
     # Logo travels as an inline image referenced from the HTML body
     logo = next(p for p in parsed.walk() if p.get_content_type() == "image/png")
     assert f'src="cid:{logo["Content-ID"].strip("<>")}"' in html
-    names = [p.get_filename() for p in parsed.iter_attachments()]
-    assert names == ["wesley-report-2026-10.csv", "wesley-report-2026-10.html"]
-    attached_html = [p for p in parsed.iter_attachments() if p.get_filename().endswith(".html")][0].get_content()
-    assert 'src="data:image/png;base64,' in attached_html
-    assert "2026-10-31 · fiscal year" in attached_html  # non-ASCII text survives
+    attachments = list(parsed.iter_attachments())
+    assert [p.get_filename() for p in attachments] == ["Wesley Treasurer's Report 2026-10.pdf"]
+    pdf = attachments[0].get_content()
+    assert pdf.startswith(b"%PDF")
+    import io as _io
+    import pdfplumber
+    with pdfplumber.open(_io.BytesIO(pdf)) as doc:
+        assert len(doc.pages) <= 2
+    # Board-safe body: no individual transactions or donors
+    assert "PUBLIX" not in html and "Jordan Lee" not in html
     row = conn.execute("SELECT status, scheduled FROM report_sends").fetchone()
     assert tuple(row) == ("sent", 1)
 

@@ -17,7 +17,6 @@ Sending happens:
   * on demand:                          python -m treasurer.mailer --month 2026-10 --now
     or the "Email this report" button on a report page.
 """
-import base64
 import os
 import smtplib
 import sqlite3
@@ -30,7 +29,8 @@ from email.utils import formataddr, make_msgid
 
 from . import ai
 from .db import get_setting
-from .reports import build_report, report_csv_text, report_for_ai, shift_month
+from .board_pdf import build_board_pdf
+from .reports import build_report, report_for_ai, shift_month
 
 DEFAULT_RECIPIENTS = "revmattstout@gmail.com"
 MAX_ATTEMPTS = 3
@@ -132,25 +132,22 @@ def build_message(app, conn, month, to):
     logo = open(logo_path, "rb").read() if os.path.exists(logo_path) else None
     logo_cid = make_msgid(domain="treasurer.local")
 
-    def render(logo_src):
-        return env.get_template("report_email.html").render(
-            r=rep, org_name=org, narrative=narrative, narrative_is_draft=narrative_is_draft,
-            has_data=has_data, month_label=month_label, logo_src=logo_src,
-            app_url=os.environ.get("TREASURER_APP_URL", ""))
-
-    # Email body references the logo as an inline (cid:) image, which Gmail
-    # shows; the attached HTML copy embeds it so it works when opened alone.
-    html = render(f"cid:{logo_cid[1:-1]}" if logo else None)
-    html_file = render("data:image/png;base64," + base64.b64encode(logo).decode() if logo else None)
+    html = env.get_template("report_email.html").render(
+        r=rep, org_name=org, narrative=narrative, narrative_is_draft=narrative_is_draft,
+        has_data=has_data, month_label=month_label,
+        logo_src=f"cid:{logo_cid[1:-1]}" if logo else None,
+        app_url=os.environ.get("TREASURER_APP_URL", ""))
+    pdf, _pages = build_board_pdf(conn, month, org, logo_path if logo else None)
 
     s = rep["summary"]
     money = env.filters["money"]
     text = (f"{org} treasurer's report for {month_label}\n\n"
             + (f"Income:   {money(s['income'])}\nExpenses: {money(s['expense'])}\nNet:      {money(s['net'])}\n"
                f"Fiscal year to date net: {money(s['ytd_net'])}\n"
+               f"Ending bank balance: {money(rep['bank']['ending_balance'])}\n"
                if has_data else "No bank or giving data has been uploaded for this month yet.\n")
             + (f"\n{narrative['text']}\n" if narrative else "")
-            + "\nThe full report is in this email (HTML) and attached as a spreadsheet (CSV).\n")
+            + "\nThe full report (every category; one sheet, front and back) is attached as a PDF.\n")
 
     msg = EmailMessage()
     msg["Subject"] = f"{org}: Treasurer's report for {month_label}" + ("" if has_data else " (no data yet)")
@@ -162,10 +159,9 @@ def build_message(app, conn, month, to):
     if logo:
         msg.get_payload()[1].add_related(logo, maintype="image", subtype="png", cid=logo_cid,
                                          filename="logo.png", disposition="inline")
-    msg.add_attachment(report_csv_text(conn, month), subtype="csv", charset="utf-8",
-                       filename=f"wesley-report-{month}.csv")
-    msg.add_attachment(html_file, subtype="html", charset="utf-8",
-                       filename=f"wesley-report-{month}.html")
+    # The board gets the PDF only: no transaction list, donor or resident names.
+    msg.add_attachment(pdf, maintype="application", subtype="pdf",
+                       filename=f"Wesley Treasurer's Report {month}.pdf")
     return msg
 
 
